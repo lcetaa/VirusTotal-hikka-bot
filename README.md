@@ -1,6 +1,6 @@
 # 🦠 VirusTotal Hikka Bot
 
-> Мощный модуль для Telegram-юзербота (Hikka), позволяющий автоматически и вручную проверять файлы, ссылки и IP-адреса на вирусы через API VirusTotal.
+> A powerful Telegram userbot (Hikka) module designed to automatically and manually scan files, URLs, and IP addresses for malware using the VirusTotal API.
 
 ![Author](https://img.shields.io/badge/Author-%40monkvy-blue?style=for-the-badge)
 ![Version](https://img.shields.io/badge/Version-2.0.1-orange?style=for-the-badge)
@@ -8,86 +8,86 @@
 
 ---
 
-## 📥 Установка / Installation
+## 📥 Installation
 
-Для установки модуля введите команду в чат с юзерботом:
+To install the module, send the following command in any chat with your userbot:
 
 ```text
 .dlm https://raw.githubusercontent.com/monkvy/VirusTotal-hikka-bot/refs/heads/main/VirusTotal.py
 ```
 
-### 🔗 Полезные ссылки / Useful Links
-Если вам нужна основа юзербота Hikka для хостинга Heroku, вы можете найти оригинальный репозиторий автора здесь:
+### 🔗 Useful Links
+If you need the Hikka userbot core for Heroku hosting, you can find the original author's repository here:
 👉 [Hikka for Heroku by coddrago](https://github.com/coddrago/Heroku)
 
 ---
 
-## 💻 Команды / Commands
+## 💻 Commands
 
-| Команда | Описание |
+| Command | Description |
 | :--- | :--- |
-| 🔍 `.vt <файл/ссылка/IP>` | Сканирует файл (через ответ на сообщение), URL или IP-адрес с автоматическим определением типа. |
-| 🗄️ `.vthash <хеш>` | Проверяет существующий анализ по хешу файла (поддерживает SHA-256 / MD5). |
-| 📜 `.vthistory` | Показывает интерактивную историю сканирований с встроенным поиском. |
-| 🧹 `.vtclear` | Полностью очищает всю историю сканирований из базы данных. |
+| 🔍 `.vt <file/url/ip>` | Scan a file (via reply), URL, or IP address with intelligent auto-detection. |
+| 🗄️ `.vthash <hash>` | Check existing analysis by file hash (supports SHA-256 / MD5). |
+| 📜 `.vthistory` | Show interactive, multi-page scan history with integrated search. |
+| 🧹 `.vtclear` | Completely clear the scan history from the database. |
 
 ---
 
-## ⚙️ Настройка / Config
+## ⚙️ Config
 
 > [!NOTE]
-> Все настройки производятся через стандартный конфиг юзербота (`.config`).
+> All configurations can be managed via the standard userbot config module (`.config`).
 
-* 🔑 `api_keys` — API-ключи VirusTotal. Поддерживается перечисление нескольких ключей через запятую для автоматической ротации и обхода лимитов *(Обязательно)*.
-* ⏱️ `max_wait_time` — Максимальное время ожидания анализа больших файлов в секундах *(По умолчанию: 300)*.
-* 🔄 `poll_interval` — Интервал между проверками статуса анализа в секундах *(По умолчанию: 10)*.
-* 💾 `save_history` — Включение/выключение сохранения истории сканирований в базу данных *(По умолчанию: True)*.
-* 📊 `max_history_items` — Максимальное количество записей, хранимых в истории *(По умолчанию: 10)*.
-* 🧹 `cleanup_interval` — Интервал фоновой очистки кэша и старых результатов в секундах *(По умолчанию: 3600)*.
-
----
-
-## 📊 Интерпретация результатов / Understanding Results
-
-* 🔴 **Malicious** — Обнаружена опасность / Угроза (Threat detected)
-* 🟡 **Suspicious** — Потенциально небезопасно / Подозрительное поведение
-* 🟢 **Harmless** — Чисто / Безопасно (Clean / Safe)
-* ⚪ **Undetected** — Антивирусные движки не обнаружили никаких угроз
-
-### 📈 Шкала оценки угроз (Threat Assessment Scale):
-* 🟩 `0 - 2` детекции — **Низкий риск (Low Risk)**
-* 🟨 `3 - 5` детекций — **Средний риск (Medium Risk)**
-* 🟧 `6 - 10` детекций — **Высокий риск (High Risk)**
-* 🟥 `10+` детекций — **Критический риск (Critical Risk)**
+* 🔑 `api_keys` — VirusTotal API keys. Supports multiple keys separated by a comma for automatic key-rotation and bypassing limits *(Required)*.
+* ⏱️ `max_wait_time` — Maximum polling wait time for large files in seconds *(Default: 300)*.
+* 🔄 `poll_interval` — Interval between analysis status checks in seconds *(Default: 10)*.
+* 💾 `save_history` — Enable or disable saving scan history to the database *(Default: True)*.
+* 📊 `max_history_items` — Maximum number of entries kept in history *(Default: 10)*.
+* 🧹 `cleanup_interval` — Background cleanup interval for cache and old results in seconds *(Default: 3600)*.
 
 ---
 
-## 🔑 Получение API ключа / Getting an API Key
+## 📊 Understanding Results
 
-1. Зарегистрируйте бесплатный аккаунт на сайте [VirusTotal](https://www.virustotal.com).
-2. Перейдите в настройки своего профиля и найдите раздел **API Key**.
-3. Скопируйте ваш персональный API-ключ.
-4. Откройте настройки юзербота, найдите модуль `VirusTotal` и вставьте ключ в поле `api_keys` *(можно добавить несколько ключей через запятую)*.
+* 🔴 **Malicious** — Dangerous / Threat detected
+* 🟡 **Suspicious** — Potentially unsafe / Suspicious behavior
+* 🟢 **Harmless** — Clean / Safe
+* ⚪ **Undetected** — No engines detected any threats
+
+### 📈 Threat Assessment Scale:
+* 🟩 `0 - 2` detections — **Low Risk**
+* 🟨 `3 - 5` detections — **Medium Risk**
+* 🟧 `6 - 10` detections — **High Risk**
+* 🟥 `10+` detections — **Critical Risk**
 
 ---
 
-## 🚀 Что нового в релизе v2.x / What's New
+## 🔑 Getting an API Key
+
+1. Register a free account at [VirusTotal](https://www.virustotal.com).
+2. Navigate to your profile settings and find the **API Key** section.
+3. Copy your personal API key.
+4. Open your userbot settings, locate the `VirusTotal` module, and paste the key into the `api_keys` field *(you can add multiple keys using commas to avoid rate limits)*.
+
+---
+
+## 🚀 What's New in Major Release v2.x
 
 <details>
-<summary><b>📋 Посмотреть список изменений (Нажмите, чтобы развернуть)</b></summary>
+<summary><b>📋 View Changelog (Click to expand)</b></summary>
 
-* 🧠 **Smart History Lifecycle (v2.0.1):** Реализована полностью автономная фоновая очистка истории. Бот ежечасно проверяет и удаляет записи старше 30 дней для поддержания оптимальной производительности.
-* 🛠️ **UI Pagination Bugfix:** Исправлена критическая ошибка интерфейса (`future_dispatcher`), из-за которой инлайн-кнопки навигации падали или зависали во время поиска по истории, если находилось ровно одно совпадение (1-1 из 1).
-* 🪛 **Clean Refactoring:** Полная очистка исходного кода. Удалены все устаревшие логи отладки и неанглийские блоки кода, что обеспечивает быструю компиляцию и минимальное потребление оперативной памяти (5-15 МБ).
-* 🗃️ **Unified Search Command:** Функционал объединен в интеллектуальный единый хаб команд `.vt`. Бот автоматически распознает и обрабатывает файлы, ссылки и IP-адреса без необходимости ввода дополнительных команд.
-* 🌐 **Advanced Net Scanning:** Поиск IP-адресов теперь мгновенно отображает флаг целевой страны и данные её официального владельца AS.
-* 🔒 **Auto-HTTPS:** Интегрировано исправление ссылок нативных сетевых эндпоинтов — бот автоматически добавляет префикс `https://` к сырым доменам перед отправкой.
-* 🌍 **Native Localization:** Удалены избыточные устаревшие переключатели конфигурации для языков. Интерфейс клиента теперь мгновенно подстраивается под основные языковые настройки вашего Hikka-бота (RU/EN).
+* 🧠 **Smart History Lifecycle (v2.0.1):** Implemented fully autonomous background history cleanup. The bot runs an automated check hourly and quietly purges records older than 30 days to keep the database performance optimal.
+* 🛠️ **UI Pagination Bugfix:** Resolved a critical interface error (`future_dispatcher`) that was causing inline navigation buttons to crash or hang during history searches when exactly one match was found (1-1 of 1).
+* 🪛 **Clean Refactoring:** Complete source code cleanup. Removed all deprecated debug logs and non-English code blocks, ensuring significantly faster compilation and minimal RAM consumption (5-15 MB).
+* 🗃️ **Unified Search Command:** Merged functionality into an intelligent single `.vt` command hub – the bot automatically recognizes and roots files, URLs, and IP addresses with zero auxiliary inputs required.
+* 🌐 **Advanced Net Scanning:** IP address lookups now instantly display the target country code flag and its official AS owner database assignment data.
+* 🔒 **Auto-HTTPS:** Integrated native network endpoint link-fixing – the bot automatically prefixes raw domains with `https://` before submission.
+* 🌍 **Native Localization:** Removed the redundant legacy configuration toggles for languages. The client UI now responds instantly to your primary Hikka bot language settings (RU/EN).
 </details>
 
 ---
 
-## 📞 Поддержка и обратная связь / Support & Feedback
+## 📞 Support & Feedback
 
-По любым вопросам, баг-репортам или предложениям функций:
+For any questions, bug reports, or feature requests:
 * ✈️ **Telegram:** [@monkvy](https://t.me/monkvy)

@@ -3,7 +3,7 @@
 #  This software is released under the MIT License.
 #  https://opensource.org/licenses/MIT
 
-__version__ = (2, 0, 1)  # v2.0 Fixed
+__version__ = (2, 0, 1)  # v2.0 fixed
 
 # meta developer: @monkvy
 
@@ -577,7 +577,6 @@ class VirusTotalMod(loader.Module):
                     else:
                         self._db.set(__name__,k,None)
             
-            
             if self.history:
                 now_utc = datetime.now(timezone.utc)
                 valid_entries = []
@@ -900,3 +899,5 @@ class VirusTotalMod(loader.Module):
         self.history.clear()
         self._db.set(__name__,'history',[])
         await utils.answer(message,f"{self._emoji('trash')} <b>{self.strings('history_cleared')}</b>. {self._emoji('success')} <b>{self.strings('deleted_entries')}: {c}</b>")
+
+    

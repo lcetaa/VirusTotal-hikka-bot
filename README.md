@@ -90,4 +90,5 @@ If you need the Hikka userbot core for Heroku hosting, you can find the original
 ## 📞 Support & Feedback
 
 For any questions, bug reports, or feature requests:
-* ✈️ **Telegram:** [@monkvy](https://t.me/monkvy)
+* 📢 **Telegram Channel:** [@codex_modules](https://t.me/codex_modules)
+* ✈️ **Developer:** [@monkvy](https://t.me/monkvy)

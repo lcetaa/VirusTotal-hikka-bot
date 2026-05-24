@@ -3,7 +3,9 @@ Author: @monkvy
 Version: 2.0.1
 
 ## 📥 Installation
-.dlm https://raw.githubusercontent.com/monkvy/VirusTotal-hikka-bot/refs/heads/main/VirusTotal_V3.py
+```
+.dlm https://raw.githubusercontent.com/monkvy/VirusTotal-hikka-bot/refs/heads/main/VirusTotal.py
+```
 
 ## 💻 Commands
 * .vt <file/url/ip> — Scan a file (via reply), URL, or IP address (with intelligent auto-detection).

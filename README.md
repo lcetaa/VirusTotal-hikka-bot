@@ -11,6 +11,7 @@ Version: 2.0.1
 
 [![Deploy](https://www.herokucdn.com/deploy/button.svg)](https://heroku.com/deploy?template=https://github.com/coddrago/Heroku)
 
+
 ## 💻 Commands
 * .vt <file/url/ip> — Scan a file (via reply), URL, or IP address (with intelligent auto-detection).
 * .vthash <hash> — Check existing analysis by file hash (supports SHA-256 / MD5).

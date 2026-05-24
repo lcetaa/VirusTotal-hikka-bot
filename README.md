@@ -6,10 +6,10 @@ Version: 2.0.1
 ```
 .dlm https://raw.githubusercontent.com/monkvy/VirusTotal-hikka-bot/refs/heads/main/VirusTotal.py
 ```
-### 🌐 Полезные ссылки
-Если вам нужен сам юзербот Hikka для хостинга Heroku, вы можете найти проект оригинального автора здесь:
+### 🌐 Useful Links
+If you need the Hikka userbot core for Heroku hosting, you can find the original author's repository here:
 
-[Исходный код Hikka для Heroku от coddrago](https://github.com/coddrago/Heroku)
+[Hikka for Heroku by coddrago](https://github.com/coddrago/Heroku)
 
 ## 💻 Commands
 * .vt <file/url/ip> — Scan a file (via reply), URL, or IP address (with intelligent auto-detection).

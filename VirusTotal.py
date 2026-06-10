@@ -532,7 +532,12 @@ class VirusTotalMod(loader.Module):
     def _format_result_info(self,scan_type:str,item_id:str,data:dict,**kwargs)->Tuple[str,str,ScanStats]:
         stats=self._extract_stats(data,'url' if scan_type in['url','ip'] else scan_type)
         t=stats.total
-        pop=data.get('data',{}).get('attributes',{}).get('times_submitted',0)
+        attrs_top=data.get('data',{}).get('attributes',{})
+        if scan_type in('ip','domain'):
+            votes=attrs_top.get('total_votes',{})
+            pop=votes.get('harmless',0)+votes.get('malicious',0)
+        else:
+            pop=attrs_top.get('times_submitted',0)
         st=kwargs.get('scan_time',0)
         url=kwargs.get('url','')
         if scan_type=='file':
@@ -552,7 +557,7 @@ class VirusTotalMod(loader.Module):
             info=[f"• {self._emoji('globe')} <b>{self.strings('ip_address')}:</b> <code>{url}</code>",f"• {self._country_flag(cc)} <b>{self.strings('country')}:</b> <code>{cc or self.strings('unknown')}</code>"]
             if ao:info.append(f"• {self._emoji('stats')} <b>{self.strings('asn')}:</b> <code>{asn} ({ao})</code>")
             else:info.append(f"• {self._emoji('stats')} <b>{self.strings('asn')}:</b> <code>{asn or self.strings('unknown')}</code>")
-            info+=[f"• {self._emoji('time')} <code>{self._format_time(st)}</code>",f"• {self._emoji('engines')} <code>{t} {self.strings('engines')}</code>"]
+            info+=[f"• {self._emoji('time')} <code>{self._format_time(st)}</code>",f"• {self._emoji('engines')} <code>{t} {self.strings('engines')}</code>",f"• {self._emoji('scans')} <code>{pop} {self.strings('scans')}</code>"]
             vt_url=f"https://www.virustotal.com/gui/ip-address/{item_id}"
         elif scan_type=='domain':
             a=data.get('data',{}).get('attributes',{})
@@ -562,10 +567,11 @@ class VirusTotalMod(loader.Module):
             rep_icon='✅' if rep>=0 else '⚠️' if rep>=-10 else '🚫'
             info=[
                 f"• {self._emoji('globe')} <b>{self.strings('domain')}:</b> <code>{item_id}</code>",
-                f"• {rep_icon} <b>{self.strings('reputation')}:</b> <code>{rep}</code>",
+                *([ f"• {rep_icon} <b>{self.strings('reputation')}:</b> <code>{rep}</code>" ] if rep != 0 else []),
                 f"• {self._emoji('stats')} <b>{self.strings('categories')}:</b> <code>{cat_str}</code>",
                 f"• {self._emoji('time')} <code>{self._format_time(st)}</code>",
                 f"• {self._emoji('engines')} <code>{t} {self.strings('engines')}</code>",
+                f"• {self._emoji('scans')} <code>{pop} {self.strings('scans')}</code>",
             ]
             vt_url=f"https://www.virustotal.com/gui/domain/{item_id}"
         else:
@@ -890,9 +896,10 @@ class VirusTotalMod(loader.Module):
         t=None
         a=utils.get_args_raw(message)
         if a:t=a.strip()
-        if not t and r and r.text:
-            f=re.findall(r'https?://[^\s"\'<>]+',r.text)
-            t=f[0] if f else None
+        if not t and r:
+            rt=getattr(r,'raw_text',None) or r.text or ''
+            f=re.findall(r'https?://[^\s"\'<>]+',rt)
+            t=f[0] if f else (rt.strip().split()[0] if rt.strip() else None)
         if not t:return await utils.answer(message,f"{self._emoji('forbidden')} <b>{self.strings('no_url')}</b>")
         t=t.split('"')[0].split('>')[0].split('<')[0]
         if self._is_valid_ip(t):

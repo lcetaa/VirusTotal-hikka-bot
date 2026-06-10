@@ -805,7 +805,6 @@ class VirusTotalMod(loader.Module):
         engines=raw.get('data',{}).get('attributes',{}).get('last_analysis_results',{})
         if not engines:
             return await call.answer(self.strings('no_detections'),show_alert=True)
-        # Собираем все детекты: сначала malicious, потом suspicious
         detections=[]
         for name,r in engines.items():
             cat=r.get('category','')
@@ -829,7 +828,6 @@ class VirusTotalMod(loader.Module):
         for emoji,name,result in chunk:
             lines.append(f"{emoji} <b>{name}</b> — <code>{result}</code>")
         txt='\n'.join(lines)
-        # Навигация
         nav=[]
         if page>0:
             nav.append({"text":f"{self._emoji('left_arrow',False)} {self.strings('prev_page')}","callback":self._details_cb,"args":(msg_id,page-1)})

@@ -1,5 +1,5 @@
-#  This file is part of Codex modules
-#  Copyright (c) 2026 Codex
+#  This file is part of lceta modules
+#  Copyright (c) 2026 lceta
 #  This software is released under the MIT License.
 #  https://opensource.org/licenses/MIT
 
@@ -7,12 +7,9 @@ __version__ = (2, 0, 1)  # v2.0 fixed
 
 # meta developer: @lceta
 
-#░█████╗░░█████╗░██████╗░███████╗██╗░░██╗
-#██╔══██╗██╔══██╗██╔══██╗██╔════╝╚██╗██╔╝
-#██║░░╚═╝██║░░██║██║░░██║█████╗░░░╚███╔╝░
-#██║░░██╗██║░░██║██║░░██║██╔══╝░░░██╔██╗░
-#╚█████╔╝╚█████╔╝██████╔╝███████╗██╔╝╚██╗
-#░╚════╝░░╚════╝░╚═════╝░╚══════╝╚═╝░░╚═╝
+# ░█░░░█▀▀░█▀▀░▀█▀░█▀█
+# ░█░░░█░░░█▀▀░░█░░█▀█
+# ░▀▀▀░▀▀▀░▀▀▀░░▀░░▀░▀
 
 import asyncio,re,base64,hashlib,time,ipaddress,random,logging
 from datetime import datetime,timezone

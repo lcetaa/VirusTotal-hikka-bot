@@ -3,7 +3,7 @@
 #  This software is released under the MIT License.
 #  https://opensource.org/licenses/MIT
 
-__version__ = (2, 3, 5)  # v2.3.5 page counter in details
+__version__ = (2, 0, 5)  # v2.0.5 page counter in details
 
 # meta developer: @lceta
 

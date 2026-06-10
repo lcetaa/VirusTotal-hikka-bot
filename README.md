@@ -13,7 +13,7 @@
 To install the module, send the following command in any chat with your userbot:
 
 ```text
-.dlm https://raw.githubusercontent.com/monkvy/VirusTotal-hikka-bot/refs/heads/main/VirusTotal.py
+.dlm https://raw.githubusercontent.com/lcetaa/VirusTotal-hikka-bot/refs/heads/main/VirusTotal.py
 ```
 
 ### 🔗 Useful Links

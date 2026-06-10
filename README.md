@@ -2,7 +2,7 @@
 
 > A powerful Telegram userbot (Hikka) module designed to automatically and manually scan files, URLs, and IP addresses for malware using the VirusTotal API.
 
-![Author](https://img.shields.io/badge/Author-%40monkvy-blue?style=for-the-badge)
+![Author](https://img.shields.io/badge/Author-%40lcetaa-blue?style=for-the-badge)
 ![Version](https://img.shields.io/badge/Version-2.0.1-orange?style=for-the-badge)
 ![Platform](https://img.shields.io/badge/Platform-Hikka%20Userbot-purple?style=for-the-badge)
 

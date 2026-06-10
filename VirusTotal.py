@@ -3,7 +3,7 @@
 #  This software is released under the MIT License.
 #  https://opensource.org/licenses/MIT
 
-__version__ = (2, 0, 1)  # v2.0 fixed
+__version__ = (2, 3, 5)  # v2.3.4 page counter in details
 
 # meta developer: @lceta
 
@@ -55,7 +55,10 @@ class HistoryEntry:
 class VirusTotalMod(loader.Module):
     strings={
         "name":"VirusTotal",
-        "no_url":"Specify URL, IP or file",
+        "no_url":"Specify URL, IP, domain or file",
+        "checking_domain":"Checking domain...",
+        "reputation":"Reputation",
+        "categories":"Categories",
         "invalid_url":"Invalid URL format",
         "downloading":"Downloading file...",
         "uploading":"Uploading to VirusTotal...",
@@ -137,11 +140,17 @@ class VirusTotalMod(loader.Module):
         "server_error":"{} VirusTotal server error ({{}}). Try again later",
         "network_error":"{} Network error: {{}}",
         "all_keys_exhausted":"{} All API keys have exhausted their quotas. Add new keys to config",
+        "details":"Details",
+        "details_title":"What engines found",
+        "no_detections":"No detections",
     }
     
     strings_ru={
         "name":"VirusTotal",
-        "no_url":"Укажите ссылку, айпи или файл",
+        "no_url":"Укажите ссылку, айпи, домен или файл",
+        "checking_domain":"Проверяю домен...",
+        "reputation":"Репутация",
+        "categories":"Категории",
         "invalid_url":"Неверный формат ссылки",
         "downloading":"Скачиваю файл...",
         "uploading":"Загружаю на VirusTotal...",
@@ -223,6 +232,9 @@ class VirusTotalMod(loader.Module):
         "server_error":"{} Ошибка сервера VirusTotal ({{}}). Попробуйте позже",
         "network_error":"{} Сетевая ошибка: {{}}",
         "all_keys_exhausted":"{} Все API ключи исчерпали лимиты. Добавьте новые ключи в конфиг",
+        "details":"Подробнее",
+        "details_title":"Что нашли движки",
+        "no_detections":"Обнаружений нет",
     }
 
     def __init__(self):
@@ -370,6 +382,8 @@ class VirusTotalMod(loader.Module):
 
     async def _request(self,method:str,url:str,**kwargs)->Optional[Dict]:
         if not self._session or self._session.closed:
+            if self._connector is None or self._connector.closed:
+                self._connector=aiohttp.TCPConnector(limit=20)
             self._session=aiohttp.ClientSession(timeout=self._timeout,connector=self._connector)
         max_attempts,base_delay,max_delay=3,2,60
         last_error=None
@@ -386,9 +400,11 @@ class VirusTotalMod(loader.Module):
                         continue
                     if resp.status==403:
                         await self._mark_key_bad(api_key)
-                        raise InvalidKeyError(f"Invalid API key: {api_key[:8]}...")
+                        raise InvalidKeyError("Invalid API key (masked)")
                     try:data=await resp.json()
-                    except:data=None
+                    except Exception:
+                        logger.debug('Failed to parse JSON response')
+                        data=None
                     if data:
                         error=await self._check_api_response(data)
                         if error:
@@ -446,18 +462,31 @@ class VirusTotalMod(loader.Module):
         try:return await self._request('GET',f'https://www.virustotal.com/api/v3/ip_addresses/{ip}')
         except Exception as e:logger.error(f"Get IP report failed: {e}");return None
 
+    async def get_domain_report(self,domain:str)->Optional[Dict]:
+        try:return await self._request('GET',f'https://www.virustotal.com/api/v3/domains/{domain}')
+        except Exception as e:logger.error(f"Get domain report failed: {e}");return None
+
+    def _is_domain(self,s:str)->bool:
+        if '/' in s or ':' in s:return False
+        pattern=r'^(?:[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z]{2,}$'
+        return bool(re.match(pattern,s))
+
     def _is_valid_ip(self,s:str)->bool:
         try:ipaddress.ip_address(s);return True
         except ValueError:return False
 
     def _validate_url(self,url:str)->Optional[str]:
-        if not url.startswith(('http://','https://')):
+        if re.match(r'^[a-z][a-z0-9+\-.]*://',url,re.IGNORECASE):
+            if not url.startswith(('http://','https://')):
+                return None
+        else:
             url='https://'+url
         try:
             r=urlparse(url)
             if r.scheme in ('http','https') and r.netloc:
                 return url
-        except:pass
+        except Exception:
+            logger.debug('URL parse failed: %s', url)
         return None
 
     def _extract_stats(self,data:Dict,scan_type:str)->ScanStats:
@@ -521,6 +550,20 @@ class VirusTotalMod(loader.Module):
             else:info.append(f"• {self._emoji('stats')} <b>{self.strings('asn')}:</b> <code>{asn or self.strings('unknown')}</code>")
             info+=[f"• {self._emoji('time')} <code>{self._format_time(st)}</code>",f"• {self._emoji('engines')} <code>{t} {self.strings('engines')}</code>"]
             vt_url=f"https://www.virustotal.com/gui/ip-address/{item_id}"
+        elif scan_type=='domain':
+            a=data.get('data',{}).get('attributes',{})
+            rep=a.get('reputation',0)
+            cats=a.get('categories',{})
+            cat_str=', '.join(set(cats.values()))[:50] if cats else self.strings('unknown')
+            rep_icon='✅' if rep>=0 else '⚠️' if rep>=-10 else '🚫'
+            info=[
+                f"• {self._emoji('globe')} <b>{self.strings('domain')}:</b> <code>{item_id}</code>",
+                f"• {rep_icon} <b>{self.strings('reputation')}:</b> <code>{rep}</code>",
+                f"• {self._emoji('stats')} <b>{self.strings('categories')}:</b> <code>{cat_str}</code>",
+                f"• {self._emoji('time')} <code>{self._format_time(st)}</code>",
+                f"• {self._emoji('engines')} <code>{t} {self.strings('engines')}</code>",
+            ]
+            vt_url=f"https://www.virustotal.com/gui/domain/{item_id}"
         else:
             d=urlparse(url).netloc
             info=[f"• {self._emoji('url')} <b>{self.strings('url')}:</b> <code>{url[:40]+'...' if len(url)>40 else url}</code>",f"• {self._emoji('globe')} <b>{self.strings('domain')}:</b> <code>{d}</code>",f"• {self._emoji('time')} <code>{self._format_time(st)}</code>",f"• {self._emoji('engines')} <code>{t} {self.strings('engines')}</code>",f"• {self._emoji('scans')} <code>{pop} {self.strings('scans')}</code>"]
@@ -528,7 +571,7 @@ class VirusTotalMod(loader.Module):
         return "\n".join(info),vt_url,stats
 
     def _result_buttons(self,vt_url:str,msg_id:int):
-        return[[{"text":f"{self._emoji('link',False)} {self.strings('view_report')}","url":vt_url}],[{"text":f"{self._emoji('history',False)} {self.strings('history')}","callback":self._history_cb,"args":(1,msg_id)}]]
+        return[[{"text":f"{self._emoji('link',False)} {self.strings('view_report')}","url":vt_url},{"text":f"{self._emoji('check',False)} {self.strings('details')}","callback":self._details_cb,"args":(msg_id,)}],[{"text":f"{self._emoji('history',False)} {self.strings('history')}","callback":self._history_cb,"args":(1,msg_id)}]]
 
     def _save_to_history(self,entry:HistoryEntry):
         if not self.config['save_history']:return
@@ -554,7 +597,12 @@ class VirusTotalMod(loader.Module):
         self._cleanup_task=asyncio.create_task(self._cleanup_loop())
 
     async def on_unload(self):
-        if self._cleanup_task:self._cleanup_task.cancel()
+        if self._cleanup_task:
+            self._cleanup_task.cancel()
+            try:
+                await self._cleanup_task
+            except asyncio.CancelledError:
+                pass
         if self._session and not self._session.closed:await self._session.close()
         self._result_cache.clear()
 
@@ -632,7 +680,7 @@ class VirusTotalMod(loader.Module):
                f"👁️<code>{stats.undetected}/{stats.total} ({round(stats.undetected/total*100,1)}%)│{self.strings('undetected')}</code></blockquote>")
             mid=msg.id if hasattr(msg,'id') else id(msg)
             self._result_cache[mid]=(t,vt_url,time.time())
-            self._db.set(__name__,f"result_{mid}",{'text':t,'vt_url':vt_url,'timestamp':time.time()})
+            self._db.set(__name__,f"result_{mid}",{'text':t,'vt_url':vt_url,'timestamp':time.time(),'raw_result':data,'scan_type':scan_type})
             await self.inline.form(text=t,message=msg,reply_markup=self._result_buttons(vt_url,mid),ttl=300)
         except Exception as e:
             await utils.answer(msg,await self._handle_error(e,"show_results"))
@@ -713,8 +761,9 @@ class VirusTotalMod(loader.Module):
                 fg=self._country_flag(en.country_code) if en.country_code else '🏳️'
                 n=en.as_owner or en.name or self.strings('unknown')
                 b=f"<b>{i}.</b> {fg} <b>{n}</b>\n   {self._emoji('url')} <code>{en.url or en.name}</code>\n   {self._emoji('time')} <code>{dt}</code>\n   {se} <code>{en.stats.malicious}/{en.stats.total}</code>"
+            elif en.scan_type=='domain':
+                b=f"<b>{i}.</b> {self._emoji('globe')} <b>{en.name or en.item_id}</b>\n   {self._emoji('url')} <code>{en.item_id}</code>\n   {self._emoji('time')} <code>{dt}</code>\n   {se} <code>{en.stats.malicious}/{en.stats.total}</code>"
             else:
-                d=urlparse(en.url or '').netloc or ''
                 b=f"<b>{i}.</b> {self._emoji('globe')} <b>{d}</b>\n   {self._emoji('url')} <code>{en.url or self.strings('unknown')}</code>\n   {self._emoji('time')} <code>{dt}</code>\n   {se} <code>{en.stats.malicious}/{en.stats.total}</code>"
             l.append(f"<blockquote>{b}</blockquote>")
         l.append(f"\n<b>{self.strings('history_entries')}: {t}/{self.config['max_history_items']}</b>")
@@ -742,6 +791,51 @@ class VirusTotalMod(loader.Module):
         await call.edit(text=f"<b>{self._emoji('success')} {self.strings('history_cleared')}! {self.strings('deleted_entries')}: {c}</b>",reply_markup=None)
 
     async def _cancel_cb(self,call):await self._history_cb(call,1)
+
+    async def _details_cb(self,call,msg_id:int,page:int=0):
+        d=self._db.get(__name__,f"result_{msg_id}")
+        if not d:
+            return await call.answer(self.strings('error').format('Result expired'),show_alert=True)
+        raw=d.get('raw_result',{})
+        scan_type=d.get('scan_type','')
+        engines=raw.get('data',{}).get('attributes',{}).get('last_analysis_results',{})
+        if not engines:
+            return await call.answer(self.strings('no_detections'),show_alert=True)
+        # Собираем все детекты: сначала malicious, потом suspicious
+        detections=[]
+        for name,r in engines.items():
+            cat=r.get('category','')
+            res=r.get('result')
+            if cat=='malicious' and res:
+                detections.append((self._emoji('skull'),name,res))
+        for name,r in engines.items():
+            cat=r.get('category','')
+            res=r.get('result')
+            if cat=='suspicious' and res:
+                detections.append((self._emoji('warning'),name,res))
+        if not detections:
+            return await call.answer(self.strings('no_detections'),show_alert=True)
+        PER_PAGE=10
+        total=len(detections)
+        max_page=(total-1)//PER_PAGE
+        page=max(0,min(page,max_page))
+        start=page*PER_PAGE
+        chunk=detections[start:start+PER_PAGE]
+        lines=[f"<b>{self._emoji('check')} {self.strings('details_title')} ({start+1}–{min(start+PER_PAGE,total)} {self.strings('of')} {total}):</b>\n"]
+        for emoji,name,result in chunk:
+            lines.append(f"{emoji} <b>{name}</b> — <code>{result}</code>")
+        txt='\n'.join(lines)
+        # Навигация
+        nav=[]
+        if page>0:
+            nav.append({"text":f"{self._emoji('left_arrow',False)} {self.strings('prev_page')}","callback":self._details_cb,"args":(msg_id,page-1)})
+        nav.append({"text":f"{page+1}/{max_page+1}","callback":self._details_cb,"args":(msg_id,page)})
+        if page<max_page:
+            nav.append({"text":f"{self.strings('next_page')} {self._emoji('right_arrow',False)}","callback":self._details_cb,"args":(msg_id,page+1)})
+        btns=[]
+        btns.append(nav)
+        btns.append([{"text":f"{self._emoji('back_arrow',False)} {self.strings('back_to_results')}","callback":self._return_cb,"args":(msg_id,)}])
+        await call.edit(text=txt,reply_markup=btns)
 
     async def _return_cb(self,call,msg_id:int):
         if msg_id in self._result_cache:
@@ -809,6 +903,16 @@ class VirusTotalMod(loader.Module):
             if rp:await self._show_results(m,t,rp,'ip',url=t,scan_time=int(time.time()-s))
             else:await m.edit(f"<b>{self._emoji('not_found')} {self.strings('not_found')}</b>")
             return
+        if self._is_domain(t):
+            m=await utils.answer(message,f"<b>{self._emoji('globe')} {self.strings('checking_domain')} {t}...</b>")
+            s=time.time()
+            try:rp=await self.get_domain_report(t)
+            except Exception as e:
+                et=await self._handle_error(e,"domain_report")
+                return await m.edit(et)
+            if rp:await self._show_results(m,t,rp,'domain',url=t,scan_time=int(time.time()-s))
+            else:await m.edit(f"<b>{self._emoji('not_found')} {self.strings('not_found')}</b>")
+            return
         u=self._validate_url(t)
         if not u:return await utils.answer(message,f"{self._emoji('error')} <b>{self.strings('invalid_url')}</b>")
         m=await utils.answer(message,f"<b>{self._emoji('url')} {self.strings('scanning_url')}</b>")
@@ -871,7 +975,8 @@ class VirusTotalMod(loader.Module):
             sz=r.get('data',{}).get('attributes',{}).get('size',0)
             fn=None
             try:fn=r.get('data',{}).get('attributes',{}).get('meaningful_name')
-            except:pass
+            except Exception:
+                logger.debug('Could not get meaningful_name')
             dn=fh[:16]+"..."
             hn=fn or f"{self.strings('hash')}: {fh[:16]}..."
             await self._show_results(m,fh,r,'file',name=dn,history_name=hn,scan_time=int(time.time()-s),file_size=sz,is_hash=True)
@@ -896,5 +1001,39 @@ class VirusTotalMod(loader.Module):
         self.history.clear()
         self._db.set(__name__,'history',[])
         await utils.answer(message,f"{self._emoji('trash')} <b>{self.strings('history_cleared')}</b>. {self._emoji('success')} <b>{self.strings('deleted_entries')}: {c}</b>")
+
+    @loader.command(ru_doc=" - обновить модуль до последней версии",en_doc=" - update module to latest version")
+    async def vtupdate(self,message):
+        url="https://raw.githubusercontent.com/lcetaa/VirusTotal-hikka-bot/refs/heads/main/VirusTotal.py"
+        m=await utils.answer(message,f"{self._emoji('refresh')} <b>Проверяю обновление...</b>")
+        try:
+            async with aiohttp.ClientSession() as s:
+                async with s.get(url,timeout=aiohttp.ClientTimeout(total=15)) as r:
+                    if r.status!=200:
+                        return await m.edit(f"{self._emoji('error')} <b>Ошибка загрузки: HTTP {r.status}</b>")
+                    code=await r.text()
+            import re as _re
+            match=_re.search(r"__version__\s*=\s*\((\d+),\s*(\d+),\s*(\d+)\)",code)
+            if match:
+                new_ver=tuple(int(x) for x in match.groups())
+                cur_ver=__version__
+                if new_ver<=cur_ver:
+                    return await m.edit(
+                        f"{self._emoji('success')} <b>У вас уже последняя версия</b>\n"
+                        f"<code>v{cur_ver[0]}.{cur_ver[1]}.{cur_ver[2]}</code>"
+                    )
+                ver_str=f"v{new_ver[0]}.{new_ver[1]}.{new_ver[2]}"
+            else:
+                ver_str="неизвестна"
+            await m.edit(f"{self._emoji('refresh')} <b>Устанавливаю обновление {ver_str}...</b>")
+            await self._client.inline_query("@hikkamods_bot",f"#install {url}")
+            await m.edit(
+                f"{self._emoji('success')} <b>Модуль обновлён до {ver_str}</b>\n"
+                f"Используйте <code>.dlm {url}</code> если не сработало автоматически"
+            )
+        except asyncio.TimeoutError:
+            await m.edit(f"{self._emoji('timeout')} <b>Таймаут при загрузке обновления</b>")
+        except Exception as e:
+            await m.edit(f"{self._emoji('error')} <b>Ошибка обновления: {e}</b>")
 
     

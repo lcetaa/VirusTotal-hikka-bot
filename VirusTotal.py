@@ -156,7 +156,7 @@ class VirusTotalMod(loader.Module):
         "version_unknown":"unknown",
         "installing_update":"Installing update {}...",
         "update_success":"Module updated to {}",
-        "update_fallback":"Use <code>.dlm {}</code> if auto-install failed (remove old: <code>.unloadmod VirusTotal</code>)",
+        "update_fallback":"Use <code>.dlm {}</code> if auto-install failed, remove old: <code>.unloadmod VirusTotal</code>",
         "update_timeout":"Timeout while downloading update",
         "update_error":"Update error: {}",
         "file_default":"file",
@@ -270,7 +270,7 @@ class VirusTotalMod(loader.Module):
         "version_unknown":"неизвестна",
         "installing_update":"Устанавливаю обновление {}...",
         "update_success":"Модуль обновлён до {}",
-        "update_fallback":"Используйте <code>.dlm {}</code> если не сработало автоматически (удалите старый: <code>.unloadmod VirusTotal</code>)",
+        "update_fallback":"Используйте <code>.dlm {}</code> если не сработало автоматически, удалите старый: <code>.unloadmod VirusTotal</code>",
         "update_timeout":"Таймаут при загрузке обновления",
         "update_error":"Ошибка обновления: {}",
         "file_default":"файл",
@@ -1170,7 +1170,12 @@ class VirusTotalMod(loader.Module):
             else:
                 ver_str=self.strings('version_unknown')
             await m.edit(f"{self._emoji('refresh')} <b>{self.strings('installing_update').format(ver_str)}</b>")
-            await self._client.inline_query("@hikkamods_bot",f"#install {url}")
+            ldr = self.lookup("Loader")
+            if not ldr or not hasattr(ldr, "download_and_install"):
+                return await m.edit(f"{self._emoji('error')} <b>{self.strings('update_error').format('Loader not found')}</b>")
+            await ldr.download_and_install(url)
+            if getattr(ldr, "fully_loaded", False):
+                ldr.update_modules_in_db()
             await m.edit(
                 f"{self._emoji('success')} <b>{self.strings('update_success').format(ver_str)}</b>\n"
                 f"{self.strings('update_fallback').format(url)}"

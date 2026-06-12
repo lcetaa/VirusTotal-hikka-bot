@@ -14,7 +14,7 @@
 
 | Command | Description |
 | :--- | :--- |
-| `.vt <file/url/ip>` | Scan a file (reply), URL, SHA-256/MD5/SHA-1, or IP — auto-detected | 
+| `.vt <file/url/ip/hash>` | Scan a file (reply), URL, SHA-256/MD5/SHA-1, or IP — auto-detected | 
 | `.vthistory [page/query]` | Paginated scan history with search support |
 | `.vtclear` | Clear all scan history |
 | `.vtupdate` | Update the module to the latest version |

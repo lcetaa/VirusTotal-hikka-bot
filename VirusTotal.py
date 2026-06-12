@@ -159,6 +159,15 @@ class VirusTotalMod(loader.Module):
         "update_fallback":"Use <code>.dlm {}</code> if auto-install failed (remove old: <code>.unloadmod VirusTotal</code>)",
         "update_timeout":"Timeout while downloading update",
         "update_error":"Update error: {}",
+        "file_default":"file",
+        "file_too_large":"File is too large to upload to VT",
+        "size_label":"Size",
+        "try_hash_search":"You can try to find this file in the VirusTotal database by hash — if someone has already scanned it before, the result will appear instantly.",
+        "downloading_for_hash":"Downloading to calculate hash...",
+        "not_in_vt_db":"File not found in VirusTotal database",
+        "search_in_vt":"🔍 Search in VirusTotal",
+        "no_search_results":"No results found for: {}",
+        "size_limit_hint":"limit 32 MB",
     }
     
     strings_ru={
@@ -264,6 +273,15 @@ class VirusTotalMod(loader.Module):
         "update_fallback":"Используйте <code>.dlm {}</code> если не сработало автоматически (удалите старый: <code>.unloadmod VirusTotal</code>)",
         "update_timeout":"Таймаут при загрузке обновления",
         "update_error":"Ошибка обновления: {}",
+        "file_default":"файл",
+        "file_too_large":"Файл слишком большой для загрузки на VT",
+        "size_label":"Размер",
+        "try_hash_search":"Можно попробовать найти этот файл в базе VirusTotal по хешу — если кто-то уже сканировал его раньше, результат появится мгновенно.",
+        "downloading_for_hash":"Скачиваю для вычисления хеша...",
+        "not_in_vt_db":"Файл не найден в базе VirusTotal",
+        "search_in_vt":"🔍 Искать в базе VirusTotal",
+        "no_search_results":"Ничего не найдено по запросу: {}",
+        "size_limit_hint":"лимит 32 МБ",
     }
 
     def __init__(self):
@@ -745,11 +763,7 @@ class VirusTotalMod(loader.Module):
                 if (en.name and q in en.name.lower()) or (en.url and q in en.url.lower()) or (en.item_id and q in en.item_id.lower())
             ]
             if not items:
-                is_ru = self.strings('clear_history') == "Очистить"
-                if is_ru:
-                    t=f"<b>{self._emoji('check')} Ничего не найдено по запросу:</b> <code>{query}</code>"
-                else:
-                    t=f"<b>{self._emoji('check')} No results found for:</b> <code>{query}</code>"
+                t=f"<b>{self._emoji('check')} {self.strings('no_search_results').format(query)}</b>"
                 if hasattr(call,'inline_message_id'):await call.edit(text=t,reply_markup=None)
                 else:await utils.answer(call, t)
                 return
@@ -955,7 +969,7 @@ class VirusTotalMod(loader.Module):
                 msg_id=r.id
                 chat_id=r.chat_id
                 sz_str=self._format_size(sz)
-                fname=r.file.name or 'файл'
+                fname=r.file.name or self.strings('file_default')
                 hist_match=[e for e in self.history if e.scan_type=='file' and (e.name or '').lower()==fname.lower()]
                 if hist_match:
                     best=hist_match[-1]
@@ -967,14 +981,14 @@ class VirusTotalMod(loader.Module):
                     except Exception:
                         pass
                 txt=(
-                    f"<b>{self._emoji('forbidden')} Файл слишком большой для загрузки на VT</b>\n"
+                    f"<b>{self._emoji('forbidden')} {self.strings('file_too_large')}</b>\n"
                     f"<code>━━━━━━━━━━━━━━━━━━━</code>\n\n"
                     f"📄 <b>{fname}</b>\n"
-                    f"📦 Размер: <code>{sz_str}</code> (лимит 32 МБ)\n\n"
-                    f"Можно попробовать найти этот файл в базе VirusTotal по хешу — если кто-то уже сканировал его раньше, результат появится мгновенно."
+                    f"📦 {self.strings('size_label')}: <code>{sz_str}</code> ({self.strings('size_limit_hint')})\n\n"
+                    f"{self.strings('try_hash_search')}"
                 )
                 async def _large_file_search_cb(call):
-                    await call.edit(text=f"<b>{self._emoji('downloading')} Скачиваю для вычисления хеша...</b>")
+                    await call.edit(text=f"<b>{self._emoji('downloading')} {self.strings('downloading_for_hash')}</b>")
                     s=time.time()
                     try:
                         import io
@@ -991,14 +1005,14 @@ class VirusTotalMod(loader.Module):
                         except Exception as e:
                             et=await self._handle_error(e,"check_cache")
                             return await call.edit(text=et)
-                        await call.edit(text=f"<b>{self._emoji('forbidden')} {self.strings('size_limit')}\n\n🔍 Файл не найден в базе VirusTotal</b>")
+                        await call.edit(text=f"<b>{self._emoji('forbidden')} {self.strings('size_limit')}\n\n🔍 {self.strings('not_in_vt_db')}</b>")
                     except Exception as e:
                         et=await self._handle_error(e,"large_file_hash")
                         return await call.edit(text=et)
                 return await self.inline.form(
                     text=txt,
                     message=message,
-                    reply_markup=[[{"text":"🔍 Искать в базе VirusTotal","callback":_large_file_search_cb}]],
+                    reply_markup=[[{"text":self.strings('search_in_vt'),"callback":_large_file_search_cb}]],
                     ttl=120
                 )
             m=await utils.answer(message,f"<b>{self._emoji('downloading')} {self.strings('downloading')}</b>")

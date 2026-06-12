@@ -150,6 +150,15 @@ class VirusTotalMod(loader.Module):
         "rescan":"Rescan",
         "rescanning":"Rescanning...",
         "rescan_not_supported":"Rescan is not supported for this type",
+        "checking_update":"Checking for update...",
+        "update_load_error":"Download error: HTTP {}",
+        "already_latest":"You already have the latest version",
+        "version_unknown":"unknown",
+        "installing_update":"Installing update {}...",
+        "update_success":"Module updated to {}",
+        "update_fallback":"Use <code>.dlm {}</code> if auto-install failed (remove old: <code>.unloadmod VirusTotal</code>)",
+        "update_timeout":"Timeout while downloading update",
+        "update_error":"Update error: {}",
     }
     
     strings_ru={
@@ -246,6 +255,15 @@ class VirusTotalMod(loader.Module):
         "rescan":"Пересканировать",
         "rescanning":"Пересканирую...",
         "rescan_not_supported":"Пересканирование не поддерживается для этого типа",
+        "checking_update":"Проверяю обновление...",
+        "update_load_error":"Ошибка загрузки: HTTP {}",
+        "already_latest":"У вас уже последняя версия",
+        "version_unknown":"неизвестна",
+        "installing_update":"Устанавливаю обновление {}...",
+        "update_success":"Модуль обновлён до {}",
+        "update_fallback":"Используйте <code>.dlm {}</code> если не сработало автоматически (удалите старый: <code>.unloadmod VirusTotal</code>)",
+        "update_timeout":"Таймаут при загрузке обновления",
+        "update_error":"Ошибка обновления: {}",
     }
 
     def __init__(self):
@@ -1117,12 +1135,12 @@ class VirusTotalMod(loader.Module):
     @loader.command(ru_doc=" - обновить модуль до последней версии",en_doc=" - update module to latest version")
     async def vtupdate(self,message):
         url="https://raw.githubusercontent.com/lcetaa/VirusTotal-hikka-bot/refs/heads/main/VirusTotal.py"
-        m=await utils.answer(message,f"{self._emoji('refresh')} <b>Проверяю обновление...</b>")
+        m=await utils.answer(message,f"{self._emoji('refresh')} <b>{self.strings('checking_update')}</b>")
         try:
             async with aiohttp.ClientSession() as s:
                 async with s.get(url,timeout=aiohttp.ClientTimeout(total=15)) as r:
                     if r.status!=200:
-                        return await m.edit(f"{self._emoji('error')} <b>Ошибка загрузки: HTTP {r.status}</b>")
+                        return await m.edit(f"{self._emoji('error')} <b>{self.strings('update_load_error').format(r.status)}</b>")
                     code=await r.text()
             import re as _re
             match=_re.search(r"__version__\s*=\s*\((\d+),\s*(\d+),\s*(\d+)\)",code)
@@ -1131,21 +1149,21 @@ class VirusTotalMod(loader.Module):
                 cur_ver=__version__
                 if new_ver<=cur_ver:
                     return await m.edit(
-                        f"{self._emoji('success')} <b>У вас уже последняя версия</b>\n"
+                        f"{self._emoji('success')} <b>{self.strings('already_latest')}</b>\n"
                         f"<code>v{cur_ver[0]}.{cur_ver[1]}.{cur_ver[2]}</code>"
                     )
                 ver_str=f"v{new_ver[0]}.{new_ver[1]}.{new_ver[2]}"
             else:
-                ver_str="неизвестна"
-            await m.edit(f"{self._emoji('refresh')} <b>Устанавливаю обновление {ver_str}...</b>")
+                ver_str=self.strings('version_unknown')
+            await m.edit(f"{self._emoji('refresh')} <b>{self.strings('installing_update').format(ver_str)}</b>")
             await self._client.inline_query("@hikkamods_bot",f"#install {url}")
             await m.edit(
-                f"{self._emoji('success')} <b>Модуль обновлён до {ver_str}</b>\n"
-                f"Используйте <code>.dlm {url}</code> если не сработало автоматически"
+                f"{self._emoji('success')} <b>{self.strings('update_success').format(ver_str)}</b>\n"
+                f"{self.strings('update_fallback').format(url)}"
             )
         except asyncio.TimeoutError:
-            await m.edit(f"{self._emoji('timeout')} <b>Таймаут при загрузке обновления</b>")
+            await m.edit(f"{self._emoji('timeout')} <b>{self.strings('update_timeout')}</b>")
         except Exception as e:
-            await m.edit(f"{self._emoji('error')} <b>Ошибка обновления: {e}</b>")
+            await m.edit(f"{self._emoji('error')} <b>{self.strings('update_error').format(e)}</b>")
 
     

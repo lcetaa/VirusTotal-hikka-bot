@@ -7,7 +7,7 @@
 # meta banner: https://raw.githubusercontent.com/lcetaa/VirusTotal-hikka-bot/refs/heads/main/logo.png
 # meta pic: https://raw.githubusercontent.com/lcetaa/VirusTotal-hikka-bot/refs/heads/main/icon.png
 
-__version__ = (2, 0, 7)
+__version__ = (2, 0, 6)
 
 # ░█░░░█▀▀░█▀▀░▀█▀░█▀█
 # ░█░░░█░░░█▀▀░░█░░█▀█

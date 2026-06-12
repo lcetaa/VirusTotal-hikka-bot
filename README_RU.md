@@ -1,7 +1,7 @@
 # 🦠 VirusTotal Hikka Bot
 
 ![Author](https://img.shields.io/badge/Автор-%40lceta-blue?style=for-the-badge)
-![Version](https://img.shields.io/badge/Версия-2.0.5-orange?style=for-the-badge)
+![Version](https://img.shields.io/badge/Версия-2.0.6-orange?style=for-the-badge)
 ![Platform](https://img.shields.io/badge/Платформа-Hikka%20Userbot-purple?style=for-the-badge)
 
 ## 📥 Установка
@@ -14,8 +14,7 @@
 
 | Команда | Описание |
 | :--- | :--- |
-| `.vt <файл/ссылка/ip>` | Сканировать файл (ответом), URL, домен или IP — определяется автоматически |
-| `.vthash <хеш>` | Проверить по SHA-256 / MD5. Поиск по частичному хешу в истории |
+| `.vt <файл/ссылка/ip/хеш>` | Сканировать файл (ответом), URL, SHA-256/MD5/SHA-1 или IP — определяется автоматически |
 | `.vthistory [страница/запрос]` | История сканирований с пагинацией и поиском |
 | `.vtclear` | Очистить историю |
 | `.vtupdate` | Обновить модуль до последней версии |

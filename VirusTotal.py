@@ -7,16 +7,17 @@
 # meta banner: https://raw.githubusercontent.com/lcetaa/VirusTotal-hikka-bot/refs/heads/main/logo.png
 # meta pic: https://raw.githubusercontent.com/lcetaa/VirusTotal-hikka-bot/refs/heads/main/icon.png
 
-__version__ = (2, 0, 5)  # v2.0.5 page counter in details
+__version__ = (2, 0, 6)
 
 # ░█░░░█▀▀░█▀▀░▀█▀░█▀█
 # ░█░░░█░░░█▀▀░░█░░█▀█
 # ░▀▀▀░▀▀▀░▀▀▀░░▀░░▀░▀
 
-import asyncio,re,base64,hashlib,time,ipaddress,random,logging
+
+import asyncio,re,base64,hashlib,time,ipaddress,logging
 from datetime import datetime,timezone
 from urllib.parse import urlparse
-from typing import Optional,Dict,Tuple,List
+from typing import Optional,Dict,Tuple
 from dataclasses import dataclass,field
 import aiohttp
 from .. import loader,utils
@@ -57,8 +58,8 @@ class HistoryEntry:
 class VirusTotalMod(loader.Module):
     strings={
         "name":"VirusTotal",
-        "_cls_doc":"Scan files, URLs, IPs and hashes via VirusTotal API.",
-        "no_url":"Specify URL, IP, domain or file",
+        "_cls_doc":"Scan files, URLs, IPs and hashes (MD5/SHA1/SHA256) via VirusTotal API.",
+        "no_url":"Specify URL, IP, domain, file or hash (MD5/SHA1/SHA256)",
         "checking_domain":"Checking domain...",
         "reputation":"Reputation",
         "categories":"Categories",
@@ -142,16 +143,19 @@ class VirusTotalMod(loader.Module):
         "not_found_error":"{} Resource not found in VirusTotal database",
         "server_error":"{} VirusTotal server error ({{}}). Try again later",
         "network_error":"{} Network error: {{}}",
-        "all_keys_exhausted":"{} All API keys have exhausted their quotas. Add new keys to config",
+        "all_keys_exhausted":"{} <b>All API keys have exhausted their quotas. Add new keys to config</b>",
         "details":"Details",
         "details_title":"What engines found",
         "no_detections":"No detections",
+        "rescan":"Rescan",
+        "rescanning":"Rescanning...",
+        "rescan_not_supported":"Rescan is not supported for this type",
     }
     
     strings_ru={
         "name":"VirusTotal",
-        "_cls_doc":"Проверка файлов, ссылок, IP и хешей через VirusTotal API.",
-        "no_url":"Укажите ссылку, айпи, домен или файл",
+        "_cls_doc":"Проверка файлов, ссылок, IP и хешей (MD5/SHA1/SHA256) через VirusTotal API.",
+        "no_url":"Укажите ссылку, айпи, домен, файл или хеш (MD5/SHA1/SHA256)",
         "checking_domain":"Проверяю домен...",
         "reputation":"Репутация",
         "categories":"Категории",
@@ -235,10 +239,13 @@ class VirusTotalMod(loader.Module):
         "not_found_error":"{} Ресурс не найден в базе VirusTotal",
         "server_error":"{} Ошибка сервера VirusTotal ({{}}). Попробуйте позже",
         "network_error":"{} Сетевая ошибка: {{}}",
-        "all_keys_exhausted":"{} Все API ключи исчерпали лимиты. Добавьте новые ключи в конфиг",
+        "all_keys_exhausted":"{} <b>Все API ключи исчерпали лимиты. Добавьте новые ключи в конфиг</b>",
         "details":"Подробнее",
         "details_title":"Что нашли движки",
         "no_detections":"Обнаружений нет",
+        "rescan":"Пересканировать",
+        "rescanning":"Пересканирую...",
+        "rescan_not_supported":"Пересканирование не поддерживается для этого типа",
     }
 
     def __init__(self):
@@ -450,6 +457,7 @@ class VirusTotalMod(loader.Module):
 
     async def get_file_report(self,file_hash:str)->Optional[Dict]:
         try:return await self._request('GET',f'https://www.virustotal.com/api/v3/files/{file_hash}')
+        except NotFoundError:logger.debug(f"File hash not found in VT: {file_hash[:16]}...");return None
         except Exception as e:logger.error(f"Get file report failed: {e}");return None
 
     async def get_url_report(self,url_id:str)->Optional[Dict]:
@@ -580,8 +588,13 @@ class VirusTotalMod(loader.Module):
             vt_url=f"https://www.virustotal.com/gui/url/{item_id}"
         return "\n".join(info),vt_url,stats
 
-    def _result_buttons(self,vt_url:str,msg_id:int):
-        return[[{"text":f"{self._emoji('link',False)} {self.strings('view_report')}","url":vt_url},{"text":f"{self._emoji('check',False)} {self.strings('details')}","callback":self._details_cb,"args":(msg_id,)}],[{"text":f"{self._emoji('history',False)} {self.strings('history')}","callback":self._history_cb,"args":(1,msg_id)}]]
+    def _result_buttons(self,vt_url:str,msg_id:int,scan_type:str=''):
+        row1=[{"text":f"{self._emoji('link',False)} {self.strings('view_report')}","url":vt_url},{"text":f"{self._emoji('check',False)} {self.strings('details')}","callback":self._details_cb,"args":(msg_id,)}]
+        row2=[]
+        if scan_type not in('ip','domain'):
+            row2.append({"text":f"{self._emoji('refresh',False)} {self.strings('rescan')}","callback":self._rescan_cb,"args":(msg_id,)})
+        row2.append({"text":f"{self._emoji('history',False)} {self.strings('history')}","callback":self._history_cb,"args":(1,msg_id)})
+        return[row1,row2]
 
     def _save_to_history(self,entry:HistoryEntry):
         if not self.config['save_history']:return
@@ -667,7 +680,7 @@ class VirusTotalMod(loader.Module):
                         } for e in self.history
                     ])
 
-    async def _show_results(self,msg,item_id:str,data:dict,scan_type:str,**kwargs):
+    async def _show_results(self,msg,item_id:str,data:dict,scan_type:str,orig_msg=None,**kwargs):
         try:
             info,vt_url,stats=self._format_result_info(scan_type,item_id,data,**kwargs)
             se,sk=self._get_status(stats)
@@ -691,7 +704,11 @@ class VirusTotalMod(loader.Module):
             mid=msg.id if hasattr(msg,'id') else id(msg)
             self._result_cache[mid]=(t,vt_url,time.time())
             self._db.set(__name__,f"result_{mid}",{'text':t,'vt_url':vt_url,'timestamp':time.time(),'raw_result':data,'scan_type':scan_type})
-            await self.inline.form(text=t,message=msg,reply_markup=self._result_buttons(vt_url,mid),ttl=300)
+            form_target=orig_msg if orig_msg is not None else msg
+            if hasattr(form_target,'inline_message_id') or (hasattr(form_target,'__class__') and 'InlineCall' in type(form_target).__name__):
+                await form_target.edit(text=t,reply_markup=self._result_buttons(vt_url,mid,scan_type))
+            else:
+                await self.inline.form(text=t,message=form_target,reply_markup=self._result_buttons(vt_url,mid,scan_type),ttl=300)
         except Exception as e:
             await utils.answer(msg,await self._handle_error(e,"show_results"))
 
@@ -848,17 +865,124 @@ class VirusTotalMod(loader.Module):
     async def _return_cb(self,call,msg_id:int):
         if msg_id in self._result_cache:
             t,vu,ts=self._result_cache[msg_id]
-            if time.time()-ts<self._cache_ttl:return await call.edit(text=t,reply_markup=self._result_buttons(vu,msg_id))
+            if time.time()-ts<self._cache_ttl:
+                d=self._db.get(__name__,f"result_{msg_id}")
+                st=d.get('scan_type','') if d else ''
+                return await call.edit(text=t,reply_markup=self._result_buttons(vu,msg_id,st))
         d=self._db.get(__name__,f"result_{msg_id}")
         if not d:return await call.answer(self.strings('error').format('Result expired'),show_alert=True) or await call.delete()
         self._result_cache[msg_id]=(d['text'],d['vt_url'],time.time())
-        await call.edit(text=d['text'],reply_markup=self._result_buttons(d['vt_url'],msg_id))
+        await call.edit(text=d['text'],reply_markup=self._result_buttons(d['vt_url'],msg_id,d.get('scan_type','')))
 
-    @loader.command(ru_doc="[файл/ссылка/айпи] - просканировать",en_doc="[file/url/IP] - scan")
+    async def _rescan_cb(self,call,msg_id:int):
+        d=self._db.get(__name__,f"result_{msg_id}")
+        if not d:
+            return await call.answer(self.strings('error').format('Result expired'),show_alert=True)
+        scan_type=d.get('scan_type','')
+        vt_url=d.get('vt_url','')
+        item_id=vt_url.rstrip('/').split('/')[-1]
+        await call.edit(text=f"<b>{self._emoji('refresh')} {self.strings('rescanning')}</b>",reply_markup=None)
+        s=time.time()
+        try:
+            if scan_type=='file':
+                await self._request('POST',f'https://www.virustotal.com/api/v3/files/{item_id}/analyse')
+                await call.edit(text=f"<b>{self._emoji('waiting')} {self.strings('waiting')}</b>")
+                await asyncio.sleep(15)
+                r=await self.get_file_report(item_id)
+                if r:
+                    raw=d.get('raw_result',{})
+                    fname=raw.get('data',{}).get('attributes',{}).get('meaningful_name') or f"{item_id[:16]}..."
+                    sz=raw.get('data',{}).get('attributes',{}).get('size',0)
+                    await self._show_results(call,item_id,r,'file',name=fname,scan_time=int(time.time()-s),file_size=sz,is_hash=True)
+                else:
+                    await call.edit(text=f"<b>{self._emoji('not_found')} {self.strings('not_found')}</b>")
+            elif scan_type=='url':
+                import base64 as _b64
+                try:
+                    padded=item_id+'=='
+                    orig_url=_b64.urlsafe_b64decode(padded).decode()
+                except Exception:
+                    orig_url=None
+                if not orig_url:
+                    return await call.edit(text=f"<b>{self._emoji('error')} {self.strings('rescan_not_supported')}</b>")
+                sc=await self.scan_url(orig_url)
+                if not sc or not (aid:=sc.get('data',{}).get('id')):
+                    return await call.edit(text=f"<b>{self._emoji('error')} {self.strings('scan_error')}</b>")
+                pr=await self._poll_analysis(aid)
+                if not pr:
+                    return await call.edit(text=f"<b>{self._emoji('timeout')} {self.strings('timeout')}</b>")
+                fn=await self.get_url_report(item_id)
+                await self._show_results(call,item_id,fn or pr,'url',url=orig_url,scan_time=int(time.time()-s))
+            elif scan_type=='ip':
+                r=await self.get_ip_report(item_id)
+                if r:await self._show_results(call,item_id,r,'ip',url=item_id,scan_time=int(time.time()-s))
+                else:await call.edit(text=f"<b>{self._emoji('not_found')} {self.strings('not_found')}</b>")
+            elif scan_type=='domain':
+                r=await self.get_domain_report(item_id)
+                if r:await self._show_results(call,item_id,r,'domain',url=item_id,scan_time=int(time.time()-s))
+                else:await call.edit(text=f"<b>{self._emoji('not_found')} {self.strings('not_found')}</b>")
+            else:
+                await call.edit(text=f"<b>{self._emoji('error')} {self.strings('rescan_not_supported')}</b>")
+        except Exception as e:
+            et=await self._handle_error(e,"rescan")
+            await call.edit(text=et)
+
+    @loader.command(ru_doc="[файл/ссылка/айпи/хеш] - просканировать",en_doc="[file/url/IP/hash] - scan")
     async def vt(self,message):
         if not self.api_keys:return await utils.answer(message,f"{self._emoji('forbidden')} <b>{self.strings('no_key')}</b>")
         r=await message.get_reply_message()
         if r and r.document:
+            sz=r.document.size
+            if sz>MAX_FILE_SIZE:
+                msg_id=r.id
+                chat_id=r.chat_id
+                sz_str=self._format_size(sz)
+                fname=r.file.name or 'файл'
+                hist_match=[e for e in self.history if e.scan_type=='file' and (e.name or '').lower()==fname.lower()]
+                if hist_match:
+                    best=hist_match[-1]
+                    s=time.time()
+                    m=await utils.answer(message,f"<b>{self._emoji('check')} {self.strings('checking_cache')}</b>")
+                    try:
+                        if ex:=await self.get_file_report(best.item_id):
+                            return await self._show_results(m,best.item_id,ex,'file',orig_msg=message,name=fname,scan_time=int(time.time()-s),file_size=sz,is_hash=True)
+                    except Exception:
+                        pass
+                txt=(
+                    f"<b>{self._emoji('forbidden')} Файл слишком большой для загрузки на VT</b>\n"
+                    f"<code>━━━━━━━━━━━━━━━━━━━</code>\n\n"
+                    f"📄 <b>{fname}</b>\n"
+                    f"📦 Размер: <code>{sz_str}</code> (лимит 32 МБ)\n\n"
+                    f"Можно попробовать найти этот файл в базе VirusTotal по хешу — если кто-то уже сканировал его раньше, результат появится мгновенно."
+                )
+                async def _large_file_search_cb(call):
+                    await call.edit(text=f"<b>{self._emoji('downloading')} Скачиваю для вычисления хеша...</b>")
+                    s=time.time()
+                    try:
+                        import io
+                        msg=await self._client.get_messages(chat_id,ids=msg_id)
+                        buf=io.BytesIO()
+                        await msg.download_media(buf)
+                        buf.seek(0)
+                        fh=hashlib.sha256(buf.read()).hexdigest()
+                        del buf
+                        await call.edit(text=f"<b>{self._emoji('check')} {self.strings('checking_cache')}</b>")
+                        try:
+                            if ex:=await self.get_file_report(fh):
+                                return await self._show_results(call,fh,ex,'file',name=fname,scan_time=int(time.time()-s),file_size=sz,is_hash=True)
+                        except Exception as e:
+                            et=await self._handle_error(e,"check_cache")
+                            return await call.edit(text=et)
+                        await call.edit(text=f"<b>{self._emoji('forbidden')} {self.strings('size_limit')}\n\n🔍 Файл не найден в базе VirusTotal</b>")
+                    except Exception as e:
+                        et=await self._handle_error(e,"large_file_hash")
+                        return await call.edit(text=et)
+                return await self.inline.form(
+                    text=txt,
+                    message=message,
+                    reply_markup=[[{"text":"🔍 Искать в базе VirusTotal","callback":_large_file_search_cb}]],
+                    ttl=120
+                )
             m=await utils.answer(message,f"<b>{self._emoji('downloading')} {self.strings('downloading')}</b>")
             s=time.time()
             try:
@@ -868,7 +992,7 @@ class VirusTotalMod(loader.Module):
                 fh=hashlib.sha256(fb).hexdigest()
                 await m.edit(f"<b>{self._emoji('check')} {self.strings('checking_cache')}</b>")
                 try:
-                    if ex:=await self.get_file_report(fh):return await self._show_results(m,fh,ex,'file',name=r.file.name,scan_time=int(time.time()-s),file_size=sz,is_hash=False)
+                    if ex:=await self.get_file_report(fh):return await self._show_results(m,fh,ex,'file',orig_msg=message,name=r.file.name,scan_time=int(time.time()-s),file_size=sz,is_hash=False)
                 except Exception as e:
                     et=await self._handle_error(e,"check_cache")
                     return await m.edit(et)
@@ -888,7 +1012,7 @@ class VirusTotalMod(loader.Module):
                 except Exception as e:
                     et=await self._handle_error(e,"final_report")
                     return await m.edit(et)
-                await self._show_results(m,fh,fn or pr,'file',name=r.file.name,scan_time=int(time.time()-s),file_size=sz,is_hash=False)
+                await self._show_results(m,fh,fn or pr,'file',orig_msg=message,name=r.file.name,scan_time=int(time.time()-s),file_size=sz,is_hash=False)
             except Exception as e:
                 et=await self._handle_error(e,"file_processing")
                 return await m.edit(et)
@@ -902,6 +1026,26 @@ class VirusTotalMod(loader.Module):
             t=f[0] if f else (rt.strip().split()[0] if rt.strip() else None)
         if not t:return await utils.answer(message,f"{self._emoji('forbidden')} <b>{self.strings('no_url')}</b>")
         t=t.split('"')[0].split('>')[0].split('<')[0]
+        fh=t.lower()
+        ht='SHA256' if re.match(r'^[a-f0-9]{64}$',fh) else 'SHA1' if re.match(r'^[a-f0-9]{40}$',fh) else 'MD5' if re.match(r'^[a-f0-9]{32}$',fh) else None
+        if ht:
+            m=await utils.answer(message,f"<b>{self._emoji('hash')} {self.strings('checking_hash')}</b>")
+            s=time.time()
+            await m.edit(f"<b>{self._emoji('check')} {self.strings('searching_report').format(ht)}</b>")
+            try:r=await self.get_file_report(fh)
+            except Exception as e:
+                et=await self._handle_error(e,"hash_report")
+                return await m.edit(et)
+            if r:
+                sz=r.get('data',{}).get('attributes',{}).get('size',0)
+                fn=None
+                try:fn=r.get('data',{}).get('attributes',{}).get('meaningful_name')
+                except Exception:logger.debug('Could not get meaningful_name')
+                dn=fh[:16]+"..."
+                hn=fn or f"{self.strings('hash')}: {fh[:16]}..."
+                await self._show_results(m,fh,r,'file',orig_msg=message,name=dn,history_name=hn,scan_time=int(time.time()-s),file_size=sz,is_hash=True)
+            else:await m.edit(f"<b>{self._emoji('not_found')} {self.strings('not_found')}</b>")
+            return
         if self._is_valid_ip(t):
             m=await utils.answer(message,f"<b>{self._emoji('globe')} {self.strings('checking')} IP {t}...</b>")
             s=time.time()
@@ -909,7 +1053,7 @@ class VirusTotalMod(loader.Module):
             except Exception as e:
                 et=await self._handle_error(e,"ip_report")
                 return await m.edit(et)
-            if rp:await self._show_results(m,t,rp,'ip',url=t,scan_time=int(time.time()-s))
+            if rp:await self._show_results(m,t,rp,'ip',orig_msg=message,url=t,scan_time=int(time.time()-s))
             else:await m.edit(f"<b>{self._emoji('not_found')} {self.strings('not_found')}</b>")
             return
         if self._is_domain(t):
@@ -919,7 +1063,7 @@ class VirusTotalMod(loader.Module):
             except Exception as e:
                 et=await self._handle_error(e,"domain_report")
                 return await m.edit(et)
-            if rp:await self._show_results(m,t,rp,'domain',url=t,scan_time=int(time.time()-s))
+            if rp:await self._show_results(m,t,rp,'domain',orig_msg=message,url=t,scan_time=int(time.time()-s))
             else:await m.edit(f"<b>{self._emoji('not_found')} {self.strings('not_found')}</b>")
             return
         u=self._validate_url(t)
@@ -929,7 +1073,7 @@ class VirusTotalMod(loader.Module):
         uid=base64.urlsafe_b64encode(u.encode()).decode().strip('=')
         await m.edit(f"<b>{self._emoji('check')} {self.strings('checking_cache')}</b>")
         try:
-            if ex:=await self.get_url_report(uid):return await self._show_results(m,uid,ex,'url',url=u,scan_time=int(time.time()-s))
+            if ex:=await self.get_url_report(uid):return await self._show_results(m,uid,ex,'url',orig_msg=message,url=u,scan_time=int(time.time()-s))
         except Exception as e:
             et=await self._handle_error(e,"url_check")
             return await m.edit(et)
@@ -948,48 +1092,7 @@ class VirusTotalMod(loader.Module):
         except Exception as e:
             et=await self._handle_error(e,"url_final")
             return await m.edit(et)
-        await self._show_results(m,uid,fn or pr,'url',url=u,scan_time=int(time.time()-s))
-
-    @loader.command(ru_doc="[хеш] - проверить по хешу",en_doc="[hash] - check by hash")
-    async def vthash(self,message):
-        if not self.api_keys:return await utils.answer(message,f"{self._emoji('forbidden')} <b>{self.strings('no_key')}</b>")
-        a=utils.get_args_raw(message)
-        if not a:return await utils.answer(message,f"{self._emoji('error')} <b>{self.strings('specify_hash')}</b>")
-        fh=a.strip().lower()
-        ht='SHA256' if re.match(r'^[a-f0-9]{64}$',fh) else 'MD5' if re.match(r'^[a-f0-9]{32}$',fh) else None
-        if not ht:
-            fd=[e for e in self.history if fh in e.item_id.lower()]
-            if fd:
-                l=[f"<b>{self._emoji('check')} {self.strings('hash_check')}</b>\n<code>━━━━━━━━━━━━━━━━━━━</code>\n\n{self.strings('search_results').format(len(fd),fh)}\n"]
-                for e in fd[:5]:
-                    dt=e.timestamp.strftime("%H:%M %d.%m UTC")
-                    if e.scan_type=='ip' and e.as_owner:
-                        fl=self._country_flag(e.country_code) if e.country_code else '🏳️'
-                        n=f"{fl} {e.as_owner}"
-                    else:n=e.name or e.url or self.strings('unknown')
-                    l.append(f"• {self._emoji('file') if e.scan_type=='file' else self._emoji('url')} {n[:30]}")
-                    l.append(f"  {self._emoji('time')} {dt}")
-                if len(fd)>5:l.append(self.strings('and_more').format(len(fd)-5))
-                l.append(f"\n{self.strings('use_full_hash')}")
-                return await self.inline.form(text='\n'.join(l),message=message,reply_markup=[[{"text":f"{self._emoji('history',False)} {self.strings('history')}","callback":self._history_cb}]],ttl=60)
-            return await utils.answer(message,f"{self._emoji('error')} <b>{self.strings('hash_not_found')}</b>")
-        m=await utils.answer(message,f"<b>{self._emoji('hash')} {self.strings('checking_hash')}</b>")
-        s=time.time()
-        await m.edit(f"<b>{self._emoji('check')} {self.strings('searching_report').format(ht)}</b>")
-        try:r=await self.get_file_report(fh)
-        except Exception as e:
-            et=await self._handle_error(e,"hash_report")
-            return await m.edit(et)
-        if r:
-            sz=r.get('data',{}).get('attributes',{}).get('size',0)
-            fn=None
-            try:fn=r.get('data',{}).get('attributes',{}).get('meaningful_name')
-            except Exception:
-                logger.debug('Could not get meaningful_name')
-            dn=fh[:16]+"..."
-            hn=fn or f"{self.strings('hash')}: {fh[:16]}..."
-            await self._show_results(m,fh,r,'file',name=dn,history_name=hn,scan_time=int(time.time()-s),file_size=sz,is_hash=True)
-        else:await m.edit(f"<b>{self._emoji('not_found')} {self.strings('not_found')}</b>")
+        await self._show_results(m,uid,fn or pr,'url',orig_msg=message,url=u,scan_time=int(time.time()-s))
 
     @loader.command(ru_doc="[страница/запрос] - показать историю или найти по названию",en_doc="[page/query] - show history or search by name")
     async def vthistory(self,message):

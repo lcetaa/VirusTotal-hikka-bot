@@ -7,7 +7,7 @@
 # meta banner: https://raw.githubusercontent.com/lcetaa/VirusTotal-hikka-bot/refs/heads/main/logo.png
 # meta pic: https://raw.githubusercontent.com/lcetaa/VirusTotal-hikka-bot/refs/heads/main/icon.png
 
-__version__ = (2, 0, 6)
+__version__ = (2, 0, 7) #fixed
 
 # ░█░░░█▀▀░█▀▀░▀█▀░█▀█
 # ░█░░░█░░░█▀▀░░█░░█▀█
@@ -378,8 +378,18 @@ class VirusTotalMod(loader.Module):
         try:return self._db.get("hikka.inline","lang","en")
         except:return "en"
 
+    def _refresh_api_keys(self):
+        raw_keys=str(self.config['api_keys'] or '')
+        new_keys=[k.strip() for k in raw_keys.split(',') if k.strip()]
+        if new_keys!=self.api_keys:
+            self.api_keys=new_keys
+            self.key_status.clear()
+            self.current_key_index=0
+        return self.api_keys
+
     async def _get_next_key(self)->Optional[str]:
         async with self.key_lock:
+            self._refresh_api_keys()
             if not self.api_keys:return None
             start=self.current_key_index
             for i in range(len(self.api_keys)):
@@ -647,8 +657,7 @@ class VirusTotalMod(loader.Module):
     async def client_ready(self,client,db):
         self._client=client
         self._db=db
-        raw_keys = str(self.config['api_keys'] or '')
-        self.api_keys=[k.strip() for k in raw_keys.split(',') if k.strip()]
+        self._refresh_api_keys()
         if self.api_keys:logger.info(f"Loaded {len(self.api_keys)} API key(s)")
         else:logger.warning("No API keys loaded from config!")
         self.key_status.clear()
@@ -729,11 +738,11 @@ class VirusTotalMod(loader.Module):
                     hn=kwargs.get('history_name') or kwargs.get('name') or f"{self.strings('hash')}: {item_id[:16]}..."
                     e=HistoryEntry(item_id=item_id,timestamp=datetime.now(timezone.utc),scan_type=scan_type,name=hn,url=kwargs.get('url'),stats=stats,raw_result=data)
                 self._save_to_history(e)
-            t=(f"<b>{self._emoji('shield')} {self.strings('results_title')}</b>\n━━━━━━━━━━━━━━━━━━━\n{info}\n\n"
-               f"{se} <b>{self.strings('status')}:</b> <code>{self.strings(sk)} ({safe}% {self.strings('safe')})</code>\n"
-               f"{se} <b>{self.strings('threats')}:</b> <code>{stats.malicious} {self.strings('detected')}</code>\n\n"
-               f"<b>{self._emoji('chart')} {self.strings('results')}:</b>\n"
-               f"<blockquote>🚫<code>{stats.malicious}/{stats.total} ({round(stats.malicious/total*100,1)}%)│{self.strings('malicious')}</code>\n"
+            t=(f"<b>{self._emoji('shield')} {self.strings('results_title')}</b>\n━━━━━━━━━━━━━━━━━━━\n<blockquote expandable>{info}</blockquote>\n"
+               f"<blockquote expandable>{se} <b>{self.strings('status')}:</b> <code>{self.strings(sk)} ({safe}% {self.strings('safe')})</code>\n"
+               f"{se} <b>{self.strings('threats')}:</b> <code>{stats.malicious} {self.strings('detected')}</code></blockquote>\n"
+               f"<blockquote expandable><b>{self._emoji('chart')} {self.strings('results')}:</b>\n"
+               f"🚫<code>{stats.malicious}/{stats.total} ({round(stats.malicious/total*100,1)}%)│{self.strings('malicious')}</code>\n"
                f"⚠️<code>{stats.suspicious}/{stats.total} ({round(stats.suspicious/total*100,1)}%)│{self.strings('suspicious')}</code>\n"
                f"{self._emoji('success')}<code>{stats.harmless}/{stats.total} ({round(stats.harmless/total*100,1)}%)│{self.strings('harmless')}</code>\n"
                f"👁️<code>{stats.undetected}/{stats.total} ({round(stats.undetected/total*100,1)}%)│{self.strings('undetected')}</code></blockquote>")
@@ -824,7 +833,7 @@ class VirusTotalMod(loader.Module):
                 b=f"<b>{i}.</b> {self._emoji('globe')} <b>{en.name or en.item_id}</b>\n   {self._emoji('url')} <code>{en.item_id}</code>\n   {self._emoji('time')} <code>{dt}</code>\n   {se} <code>{en.stats.malicious}/{en.stats.total}</code>"
             else:
                 b=f"<b>{i}.</b> {self._emoji('globe')} <b>{d}</b>\n   {self._emoji('url')} <code>{en.url or self.strings('unknown')}</code>\n   {self._emoji('time')} <code>{dt}</code>\n   {se} <code>{en.stats.malicious}/{en.stats.total}</code>"
-            l.append(f"<blockquote>{b}</blockquote>")
+            l.append(f"<blockquote expandable>{b}</blockquote>")
         l.append(f"\n<b>{self.strings('history_entries')}: {t}/{self.config['max_history_items']}</b>")
         txt='\n'.join(l)
         btns=[]
@@ -840,7 +849,7 @@ class VirusTotalMod(loader.Module):
 
     async def _clear_confirm_cb(self,call):
         if not self.history:return await call.answer(self.strings('history_empty'),show_alert=True)
-        t=f"<b>{self._emoji('warning')} {self.strings('confirm_clear')}</b>\n━━━━━━━━━━━━━━━━━━━\n\n{self.strings('clear_history_confirm')}\n<b>{self.strings('entries')}: {len(self.history)}</b>"
+        t=f"<b>{self._emoji('warning')} {self.strings('confirm_clear')}</b>\n━━━━━━━━━━━━━━━━━━━\n\n<blockquote expandable>{self.strings('clear_history_confirm')}\n<b>{self.strings('entries')}: {len(self.history)}</b></blockquote>"
         await call.edit(text=t,reply_markup=[[{"text":f"{self._emoji('success',False)} {self.strings('yes_clear')}","callback":self._clear_cb},{"text":self.strings('cancel'),"callback":self._cancel_cb}]])
 
     async def _clear_cb(self,call):
@@ -961,7 +970,7 @@ class VirusTotalMod(loader.Module):
 
     @loader.command(ru_doc="[файл/ссылка/айпи/хеш] - просканировать",en_doc="[file/url/IP/hash] - scan")
     async def vt(self,message):
-        if not self.api_keys:return await utils.answer(message,f"{self._emoji('forbidden')} <b>{self.strings('no_key')}</b>")
+        if not self._refresh_api_keys():return await utils.answer(message,f"{self._emoji('forbidden')} <b>{self.strings('no_key')}</b>")
         r=await message.get_reply_message()
         if r and r.document:
             sz=r.document.size

@@ -1,7 +1,7 @@
 # 🦠 VirusTotal Hikka Bot
 
 ![Author](https://img.shields.io/badge/Author-%40lceta-blue?style=for-the-badge)
-![Version](https://img.shields.io/badge/Version-2.0.6-orange?style=for-the-badge)
+![Version](https://img.shields.io/badge/Version-2.0.7-orange?style=for-the-badge)
 ![Platform](https://img.shields.io/badge/Platform-Hikka%20Userbot-purple?style=for-the-badge)
 
 ## 📥 Installation

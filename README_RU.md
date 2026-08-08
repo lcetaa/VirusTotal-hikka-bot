@@ -1,8 +1,8 @@
 # 🦠 VirusTotal Hikka Bot
 
-![Author](https://img.shields.io/badge/Автор-%40lceta-blue?style=for-the-badge)
-![Version](https://img.shields.io/badge/Версия-2.0.7-orange?style=for-the-badge)
-![Platform](https://img.shields.io/badge/Платформа-Hikka%20Userbot-purple?style=for-the-badge)
+![Author](https://img.shields.io/badge/Author-%40lceta-blue?style=for-the-badge)
+![Version](https://img.shields.io/badge/Version-2.0.8-orange?style=for-the-badge)
+![Platform](https://img.shields.io/badge/Platform-Hikka%20Userbot-purple?style=for-the-badge)
 
 ## 📥 Установка
 
@@ -14,31 +14,36 @@
 
 | Команда | Описание |
 | :--- | :--- |
-| `.vt <файл/ссылка/ip/хеш>` | Сканировать файл (ответом), URL, SHA-256/MD5/SHA-1 или IP — определяется автоматически |
-| `.vthistory [страница/запрос]` | История сканирований с пагинацией и поиском |
-| `.vtclear` | Очистить историю |
+| `.vt <файл/ссылка/айпи/домен/хеш>` | Проверить файл (реплаем), ссылку, домен (с поддержкой IDN/юникода), SHA-256/MD5/SHA-1 или IP — определяется автоматически |
+| `.vthistory [страница/запрос]` | История сканирований с постраничным просмотром и поиском |
+| `.vtclear` | Очистить всю историю сканирований |
+| `.vtkey` | Показать статус API-ключей, использование квоты и число запросов за день |
 | `.vtupdate` | Обновить модуль до последней версии |
 
 ## ⚙️ Настройки
 
 | Параметр | По умолчанию |
 | :--- | :--- |
-| `api_keys` — API ключ(и) через запятую *(обязательно)* | — |
-| `max_wait_time` — макс. время ожидания, сек (60–600) | `300` |
+| `api_keys` — API-ключ(и), через запятую *(обязательно)* | — |
+| `max_wait_time` — макс. время ожидания анализа, сек (60–600) | `300` |
 | `poll_interval` — интервал проверки, сек (5–10) | `10` |
-| `save_history` — сохранять историю | `True` |
+| `save_history` — сохранять историю сканирований | `True` |
 | `max_history_items` — макс. записей в истории (1–10) | `10` |
 | `cleanup_interval` — интервал очистки, сек (300–86400) | `3600` |
 
 ## 📊 Результаты
 
-🔴 Malicious · 🟡 Suspicious · 🟢 Harmless · ⚪ Undetected
+🔴 Вредоносный · 🟡 Подозрительный · 🟢 Безопасный · ⚪ Не обнаружено
 
 🟩 0–2 Низкий · 🟨 3–5 Средний · 🟧 6–10 Высокий · 🟥 10+ Критический
 
-## 🔑 API ключ
+К каждому результату сканирования прилагается панель **комментариев сообщества** — можно читать существующие отзывы, оставлять свой или удалять его позже, не выходя из чата.
 
-Регистрация на [virustotal.com](https://www.virustotal.com) → Профиль → API Key → вставить в `.config VirusTotal api_keys`
+## 🔑 API-ключ
+
+Зарегистрируйтесь на [virustotal.com](https://www.virustotal.com) → Profile → API Key → вставьте в `.config VirusTotal api_keys`
+
+Можно добавить несколько ключей через запятую, чтобы увеличить суммарную дневную квоту. Модуль автоматически чередует ключи и пропускает те, что упёрлись в лимит.
 
 ## 📞 Поддержка
 

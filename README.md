@@ -1,7 +1,7 @@
 # 🦠 VirusTotal Hikka Bot
 
 ![Author](https://img.shields.io/badge/Author-%40lceta-blue?style=for-the-badge)
-![Version](https://img.shields.io/badge/Version-2.0.7-orange?style=for-the-badge)
+![Version](https://img.shields.io/badge/Version-2.0.8-orange?style=for-the-badge)
 ![Platform](https://img.shields.io/badge/Platform-Hikka%20Userbot-purple?style=for-the-badge)
 
 ## 📥 Installation
@@ -14,9 +14,10 @@
 
 | Command | Description |
 | :--- | :--- |
-| `.vt <file/url/ip/hash>` | Scan a file (reply), URL, SHA-256/MD5/SHA-1, or IP — auto-detected | 
+| `.vt <file/url/ip/domain/hash>` | Scan a file (reply), URL, domain (IDN/Unicode supported), SHA-256/MD5/SHA-1, or IP — auto-detected |
 | `.vthistory [page/query]` | Paginated scan history with search support |
 | `.vtclear` | Clear all scan history |
+| `.vtkey` | Show API key status, quota usage, and daily request count |
 | `.vtupdate` | Update the module to the latest version |
 
 ## ⚙️ Config
@@ -36,9 +37,13 @@
 
 🟩 0–2 Low · 🟨 3–5 Medium · 🟧 6–10 High · 🟥 10+ Critical
 
+Every scan result also includes a **community comments** panel — read existing comments, post your own review, or delete it later, right from the chat.
+
 ## 🔑 API Key
 
 Register at [virustotal.com](https://www.virustotal.com) → Profile → API Key → paste into `.config VirusTotal api_keys`
+
+You can add multiple keys, comma-separated, to increase your combined daily quota. The module automatically rotates between keys and skips ones that hit their rate limit.
 
 ## 📞 Support
 

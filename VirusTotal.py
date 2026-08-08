@@ -7,14 +7,14 @@
 # meta banner: https://raw.githubusercontent.com/lcetaa/VirusTotal-hikka-bot/refs/heads/main/logo.png
 # meta pic: https://raw.githubusercontent.com/lcetaa/VirusTotal-hikka-bot/refs/heads/main/icon.png
 
-__version__ = (2, 0, 7) #fixed
+__version__ = (2, 0, 8) #show api spend toast and comments added
 
 # ░█░░░█▀▀░█▀▀░▀█▀░█▀█
 # ░█░░░█░░░█▀▀░░█░░█▀█
 # ░▀▀▀░▀▀▀░▀▀▀░░▀░░▀░▀
 
 
-import asyncio,re,base64,hashlib,time,ipaddress,logging
+import asyncio,re,base64,hashlib,time,ipaddress,logging,html
 from datetime import datetime,timezone
 from urllib.parse import urlparse
 from typing import Optional,Dict,Tuple
@@ -24,6 +24,8 @@ from .. import loader,utils
 
 MAX_FILE_SIZE=32*1024*1024
 HISTORY_PER_PAGE=5
+COMMENTS_PER_PAGE=10
+MAX_JUMP_PAGES=7
 logger=logging.getLogger(__name__)
 
 class VirusTotalError(Exception):pass
@@ -74,17 +76,14 @@ class VirusTotalMod(loader.Module):
         "timeout":"Scan timeout",
         "view_report":"Full report",
         "checking_cache":"Checking cache...",
-        "getting_results":"Getting results...",
         "upload_error":"Upload error",
         "scan_error":"Scan error",
-        "download_error":"Failed to download file: {}",
         "results_title":"VirusTotal Scan Results",
         "history_title":"VirusTotal Scan History",
         "history_empty":"Scan history is empty",
         "history_cleared":"History cleared",
         "history_entries":"Total entries",
         "clear_history":"Clear",
-        "hash_check":"Check by hash",
         "cancel":"Cancel",
         "confirm_clear":"Confirm clear",
         "clear_history_confirm":"⚠️ Are you sure you want to clear all history?\nThis action cannot be undone.",
@@ -103,8 +102,6 @@ class VirusTotalMod(loader.Module):
         "very_dangerous":"very dangerous",
         "suspicious":"suspicious",
         "likely_safe":"likely safe",
-        "high_risk":"high risk",
-        "low_risk":"low risk",
         "threats":"Threats",
         "detected":"detected",
         "status":"Status",
@@ -113,11 +110,6 @@ class VirusTotalMod(loader.Module):
         "malicious":"Malicious",
         "harmless":"Harmless",
         "undetected":"Undetected",
-        "specify_hash":"Specify file hash (SHA256 or MD5)",
-        "hash_not_found":"Invalid hash format",
-        "search_results":"Found {} entries with hash {}:",
-        "and_more":"... and {} more entries",
-        "use_full_hash":"Use full hash for check",
         "checking_hash":"Checking hash...",
         "searching_report":"Searching report by {} hash...",
         "not_found":"Not found",
@@ -139,17 +131,40 @@ class VirusTotalMod(loader.Module):
         "entries":"Entries",
         "quota_error":"{} VirusTotal daily quota exceeded. Try again tomorrow or add more API keys",
         "invalid_key_error":"{} Invalid API key. Check your key(s) in config: <code>.cfg VirusTotal api_keys</code>",
-        "rate_limit_error":"{} Too many requests. Please wait {{}} seconds",
+        "rate_limit_error":"{} Too many requests. Please wait {} seconds",
         "not_found_error":"{} Resource not found in VirusTotal database",
-        "server_error":"{} VirusTotal server error ({{}}). Try again later",
-        "network_error":"{} Network error: {{}}",
+        "server_error":"{} VirusTotal server error ({}). Try again later",
+        "network_error":"{} Network error: {}",
         "all_keys_exhausted":"{} <b>All API keys have exhausted their quotas. Add new keys to config</b>",
-        "details":"Details",
-        "details_title":"What engines found",
-        "no_detections":"No detections",
-        "rescan":"Rescan",
-        "rescanning":"Rescanning...",
-        "rescan_not_supported":"Rescan is not supported for this type",
+        "comments":"Comments",
+        "comments_title":"Community comments",
+        "comments_total":"Total: {} comments",
+        "no_comments":"No comments for this item yet",
+        "comment_votes":"👍 {} 👎 {}",
+        "quota_short":"⚠️ API quota used up",
+        "quota_title":"API Keys",
+        "quota_active_keys":"Keys",
+        "quota_requests_today":"Today",
+        "quota_used":"Quota",
+        "quota_key_type":"Type",
+        "loading":"Loading…",
+        "quota_free":"Free",
+        "quota_paid":"Paid",
+        "quota_unavailable":"VT quota data unavailable",
+        "quota_no_keys":"No API keys configured",
+        "please_wait":"⏳ Already loading, please wait",
+        "spent_requests":"API keys spent: {}",
+        "to_start":"To start",
+        "to_end":"To end",
+        "jump_limit_hit":"⚠️ Limit reached API keys: {}",
+        "write_review":"Write review",
+        "review_prompt":"Enter your review text",
+        "review_posted":"Review posted: {}",
+        "review_failed":"Review error: {}",
+        "review_empty":"Review text cannot be empty",
+        "delete_short":"delete",
+        "you":"you",
+        "comment_deleted":"Comment deleted",
         "checking_update":"Checking for update...",
         "update_load_error":"Download error: HTTP {}",
         "already_latest":"You already have the latest version",
@@ -188,17 +203,14 @@ class VirusTotalMod(loader.Module):
         "timeout":"Таймаут сканирования",
         "view_report":"Полный отчёт",
         "checking_cache":"Проверка кэша...",
-        "getting_results":"Получаю результаты...",
         "upload_error":"Ошибка загрузки",
         "scan_error":"Ошибка сканирования",
-        "download_error":"Не удалось скачать файл: {}",
         "results_title":"Результаты сканирования VirusTotal",
         "history_title":"История сканирований VirusTotal",
         "history_empty":"История сканирований пуста",
         "history_cleared":"История очищена",
         "history_entries":"Всего записей",
         "clear_history":"Очистить",
-        "hash_check":"Проверить по хешу",
         "cancel":"Отмена",
         "confirm_clear":"Подтвердить очистку",
         "clear_history_confirm":"⚠️ Вы уверены, что хотите очистить всю историю?\nЭто действие нельзя отменить.",
@@ -217,8 +229,6 @@ class VirusTotalMod(loader.Module):
         "very_dangerous":"очень опасный",
         "suspicious":"подозрительный",
         "likely_safe":"вероятно безопасный",
-        "high_risk":"высокий риск",
-        "low_risk":"низкий риск",
         "threats":"Угроз",
         "detected":"обнаружено",
         "status":"Статус",
@@ -227,11 +237,6 @@ class VirusTotalMod(loader.Module):
         "malicious":"Вредоносные",
         "harmless":"Безвредные",
         "undetected":"Не обнаружено",
-        "specify_hash":"Укажите хеш файла (SHA256 или MD5)",
-        "hash_not_found":"Неверный формат хеша",
-        "search_results":"Найдено {} записей с хешем {}:",
-        "and_more":"... и еще {} записей",
-        "use_full_hash":"Используйте полный хеш",
         "checking_hash":"Проверка хеша...",
         "searching_report":"Поиск отчета по {} хешу...",
         "not_found":"Не найден",
@@ -253,17 +258,40 @@ class VirusTotalMod(loader.Module):
         "entries":"Записи",
         "quota_error":"{} Превышен дневной лимит запросов VirusTotal. Попробуйте завтра или добавьте ещё API ключей",
         "invalid_key_error":"{} Неверный API ключ. Проверьте ключ(и) в конфиге: <code>.cfg VirusTotal api_keys</code>",
-        "rate_limit_error":"{} Слишком много запросов. Подождите {{}} секунд",
+        "rate_limit_error":"{} Слишком много запросов. Подождите {} секунд",
         "not_found_error":"{} Ресурс не найден в базе VirusTotal",
-        "server_error":"{} Ошибка сервера VirusTotal ({{}}). Попробуйте позже",
-        "network_error":"{} Сетевая ошибка: {{}}",
+        "server_error":"{} Ошибка сервера VirusTotal ({}). Попробуйте позже",
+        "network_error":"{} Сетевая ошибка: {}",
         "all_keys_exhausted":"{} <b>Все API ключи исчерпали лимиты. Добавьте новые ключи в конфиг</b>",
-        "details":"Подробнее",
-        "details_title":"Что нашли движки",
-        "no_detections":"Обнаружений нет",
-        "rescan":"Пересканировать",
-        "rescanning":"Пересканирую...",
-        "rescan_not_supported":"Пересканирование не поддерживается для этого типа",
+        "comments":"Комментарии",
+        "comments_title":"Комментарии сообщества",
+        "comments_total":"Всего: {} коммент.",
+        "no_comments":"Комментарии отсутствуют",
+        "comment_votes":"👍 {} 👎 {}",
+        "quota_short":"⚠️ Лимит API исчерпан",
+        "quota_title":"API ключи",
+        "quota_active_keys":"Ключи",
+        "quota_requests_today":"Сегодня",
+        "quota_used":"Квота",
+        "quota_key_type":"Тип",
+        "loading":"Загрузка…",
+        "quota_free":"Бесплатный",
+        "quota_paid":"Платный",
+        "quota_unavailable":"Данные квоты VT недоступны",
+        "quota_no_keys":"API ключи не настроены",
+        "please_wait":"⏳ Уже загружается, подождите",
+        "spent_requests":"Потрачено API ключей: {}",
+        "to_start":"В начало",
+        "to_end":"В конец",
+        "jump_limit_hit":"⚠️ Лимит достигнут API ключей: {}",
+        "write_review":"Отзыв",
+        "review_prompt":"Введите текст отзыва",
+        "review_posted":"Отзыв опубликован: {}",
+        "review_failed":"Ошибка отзыва: {}",
+        "review_empty":"Текст отзыва не может быть пустым",
+        "delete_short":"удалить",
+        "you":"вы",
+        "comment_deleted":"Комментарий удалён",
         "checking_update":"Проверяю обновление...",
         "update_load_error":"Ошибка загрузки: HTTP {}",
         "already_latest":"У вас уже последняя версия",
@@ -298,9 +326,18 @@ class VirusTotalMod(loader.Module):
         self._cleanup_task=None
         self._result_cache={}
         self._cache_ttl=300
+        self._comments_cache={}
+        self._comments_cache_ttl=300
+        self._comments_cache_max=200
+        self._report_cache={}
+        self._report_cache_ttl=300
+        self._report_cache_max=300
+        self._comments_inflight=set()
         self.api_keys=[]
         self.key_status={}
         self.current_key_index=0
+        self._request_count=0
+        self._request_count_day=None
         self.key_lock=asyncio.Lock()
         self._timeout=aiohttp.ClientTimeout(total=30)
         self._connector=aiohttp.TCPConnector(limit=20)
@@ -344,6 +381,7 @@ class VirusTotalMod(loader.Module):
             'server':('<emoji document_id=5341715473882955310>⚙️</emoji>','⚙️'),
             'quota':('<emoji document_id=5206492775075295242>💔</emoji>','💔'),
             'exhausted':('<emoji document_id=5274099962655816924>❗️</emoji>','❗️'),
+            'comment':('<emoji document_id=5443038326535759644>💬</emoji>','💬'),
         }
         return emojis[name][0] if premium else emojis[name][1]
 
@@ -376,7 +414,7 @@ class VirusTotalMod(loader.Module):
 
     def _get_lang(self)->str:
         try:return self._db.get("hikka.inline","lang","en")
-        except:return "en"
+        except Exception:return "en"
 
     def _refresh_api_keys(self):
         raw_keys=str(self.config['api_keys'] or '')
@@ -414,18 +452,34 @@ class VirusTotalMod(loader.Module):
         NotFoundError:('check','not_found_error'),
     }
 
-    async def _handle_error(self,e:Exception,context:str="")->str:
-        logger.exception(f"VirusTotal error in {context}: {e}")
+    _key_pattern=re.compile(r'\b[a-fA-F0-9]{32,}\b')
+
+    def _redact(self,text:str)->str:
+        try:
+            return self._key_pattern.sub(lambda m:m.group(0)[:6]+'…redacted…',text)
+        except Exception:
+            return text
+
+    def _log_err(self,msg:str,e:Optional[Exception]=None,level:str='error')->None:
+        """Log a message, always redacting API keys from the exception text."""
+        text=f"{msg}: {self._redact(str(e))}" if e is not None else msg
+        getattr(logger,level,logger.error)(text)
+
+    async def _handle_error(self,e:Exception,context:str="",plain:bool=False)->str:
+        logger.exception(f"VirusTotal error in {context}: {self._redact(str(e))}")
+        em=lambda name:self._emoji(name,not plain)
         if isinstance(e,asyncio.TimeoutError):return self.strings("timeout")
         if isinstance(e,aiohttp.ClientResponseError):
-            if e.status==403:return f"{self._emoji('shield')} {self.strings('invalid_key_error').format(self._emoji('shield'))}"
-            if e.status==429:return f"{self._emoji('progress')} {self.strings('rate_limit_error').format(self._emoji('progress'),e.headers.get('Retry-After','60'))}"
-            if e.status==404:return f"{self._emoji('check')} {self.strings('not_found_error').format(self._emoji('check'))}"
-            if e.status>=500:return f"{self._emoji('server')} {self.strings('server_error').format(self._emoji('server'),e.status)}"
-        if isinstance(e,aiohttp.ClientError):return f"{self._emoji('globe')} {self.strings('network_error').format(self._emoji('globe'),str(e))}"
+            if e.status==403:return self.strings('invalid_key_error').format(em('shield'))
+            if e.status==429:return self.strings('rate_limit_error').format(em('progress'),e.headers.get('Retry-After','60'))
+            if e.status==404:return self.strings('not_found_error').format(em('check'))
+            if e.status>=500:return self.strings('server_error').format(em('server'),e.status)
+        if isinstance(e,aiohttp.ClientError):return self.strings('network_error').format(em('globe'),str(e))
         for err,(emoji,key) in self._error_map.items():
-            if isinstance(e,err):return f"{self._emoji(emoji)} {self.strings(key).format(self._emoji(emoji))}"
-        if isinstance(e,VirusTotalError):return f"{self._emoji('exhausted')} {self.strings('all_keys_exhausted').format(self._emoji('exhausted'))}"
+            if isinstance(e,err):return self.strings(key).format(em(emoji))
+        if isinstance(e,VirusTotalError):
+            if str(e)=="No API keys available":return f"{em('forbidden')} {self.strings('quota_no_keys')}"
+            return self.strings('all_keys_exhausted').format(em('exhausted'))
         return self.strings("error").format(str(e))
 
     async def _check_api_response(self,data:dict)->Optional[Exception]:
@@ -438,6 +492,10 @@ class VirusTotalMod(loader.Module):
         return VirusTotalError(m)
 
     async def _request(self,method:str,url:str,**kwargs)->Optional[Dict]:
+        today=datetime.now(timezone.utc).date()
+        if self._request_count_day!=today:
+            self._request_count_day=today
+            self._request_count=0
         if not self._session or self._session.closed:
             if self._connector is None or self._connector.closed:
                 self._connector=aiohttp.TCPConnector(limit=20)
@@ -451,9 +509,11 @@ class VirusTotalMod(loader.Module):
             try:
                 async with self._session.request(method,url,**req_kwargs) as resp:
                     if resp.status==429:
-                        delay=int(resp.headers.get('Retry-After',min(base_delay*2**attempt,max_delay)))
                         await self._mark_key_bad(api_key)
-                        await asyncio.sleep(delay)
+                        has_other_key=any(self.key_status.get(k,True) for k in self.api_keys if k!=api_key)
+                        if not has_other_key:
+                            delay=int(resp.headers.get('Retry-After',min(base_delay*2**attempt,max_delay)))
+                            await asyncio.sleep(delay)
                         continue
                     if resp.status==403:
                         await self._mark_key_bad(api_key)
@@ -472,6 +532,7 @@ class VirusTotalMod(loader.Module):
                             await asyncio.sleep(min(base_delay*2**attempt,max_delay))
                             continue
                         return None
+                    self._request_count+=1
                     return data
             except (aiohttp.ClientError,asyncio.TimeoutError) as e:
                 last_error=e
@@ -495,39 +556,135 @@ class VirusTotalMod(loader.Module):
         try:
             r=await self._request('POST','https://www.virustotal.com/api/v3/files',data=data)
             return r.get('data',{}).get('id') if r else None
-        except Exception as e:logger.error(f"Upload failed: {e}");return None
+        except Exception as e:self._log_err("Upload failed",e);return None
+
+    async def get_overall_quotas(self,api_key:str)->Optional[Dict]:
+        if not self._session or self._session.closed:
+            if self._connector is None or self._connector.closed:
+                self._connector=aiohttp.TCPConnector(limit=20)
+            self._session=aiohttp.ClientSession(timeout=self._timeout,connector=self._connector)
+        url=f'https://www.virustotal.com/api/v3/users/{api_key}/overall_quotas'
+        max_attempts,base_delay,max_delay=3,2,20
+        for attempt in range(max_attempts):
+            try:
+                async with self._session.request('GET',url,headers={'x-apikey':api_key},timeout=self._timeout) as resp:
+                    if resp.status==429:
+                        delay=int(resp.headers.get('Retry-After',min(base_delay*2**attempt,max_delay)))
+                        if attempt<max_attempts-1:
+                            await asyncio.sleep(delay)
+                            continue
+                        return None
+                    if resp.status>=500 and attempt<max_attempts-1:
+                        await asyncio.sleep(min(base_delay*2**attempt,max_delay))
+                        continue
+                    if resp.status!=200:return None
+                    return await resp.json()
+            except (aiohttp.ClientError,asyncio.TimeoutError) as e:
+                if attempt<max_attempts-1:
+                    await asyncio.sleep(min(base_delay*2**attempt,max_delay))
+                    continue
+                logger.debug(f"Quota fetch failed: {self._redact(str(e))}")
+                return None
+        return None
 
     async def get_analysis(self,analysis_id:str)->Optional[Dict]:
         try:return await self._request('GET',f'https://www.virustotal.com/api/v3/analyses/{analysis_id}')
-        except Exception as e:logger.error(f"Get analysis failed: {e}");return None
+        except Exception as e:self._log_err("Get analysis failed",e);return None
 
-    async def get_file_report(self,file_hash:str)->Optional[Dict]:
-        try:return await self._request('GET',f'https://www.virustotal.com/api/v3/files/{file_hash}')
-        except NotFoundError:logger.debug(f"File hash not found in VT: {file_hash[:16]}...");return None
-        except Exception as e:logger.error(f"Get file report failed: {e}");return None
+    async def _cached_report(self,cache_key:tuple,fetch,force:bool=False)->Optional[Dict]:
+        if not force:
+            cached=self._report_cache.get(cache_key)
+            if cached:
+                resp,ts=cached
+                if time.time()-ts<self._report_cache_ttl:
+                    return resp
+                self._report_cache.pop(cache_key,None)
+        resp=await fetch()
+        if resp is not None:
+            if len(self._report_cache)>=self._report_cache_max:
+                oldest_key=min(self._report_cache,key=lambda k:self._report_cache[k][1])
+                self._report_cache.pop(oldest_key,None)
+            self._report_cache[cache_key]=(resp,time.time())
+        return resp
 
-    async def get_url_report(self,url_id:str)->Optional[Dict]:
-        try:return await self._request('GET',f'https://www.virustotal.com/api/v3/urls/{url_id}')
-        except Exception as e:logger.error(f"Get URL report failed: {e}");return None
+    async def get_file_report(self,file_hash:str,force:bool=False)->Optional[Dict]:
+        async def fetch():
+            try:return await self._request('GET',f'https://www.virustotal.com/api/v3/files/{file_hash}')
+            except NotFoundError:logger.debug(f"File hash not found in VT: {file_hash[:16]}...");return None
+            except Exception as e:self._log_err("Get file report failed",e);return None
+        return await self._cached_report(('file',file_hash),fetch,force)
+
+    async def get_url_report(self,url_id:str,force:bool=False)->Optional[Dict]:
+        async def fetch():
+            try:return await self._request('GET',f'https://www.virustotal.com/api/v3/urls/{url_id}')
+            except Exception as e:self._log_err("Get URL report failed",e);return None
+        return await self._cached_report(('url',url_id),fetch,force)
 
     async def scan_url(self,url:str)->Optional[Dict]:
         data=aiohttp.FormData()
         data.add_field('url',url)
         try:return await self._request('POST','https://www.virustotal.com/api/v3/urls',data=data)
-        except Exception as e:logger.error(f"Scan URL failed: {e}");return None
+        except Exception as e:self._log_err("Scan URL failed",e);return None
 
-    async def get_ip_report(self,ip:str)->Optional[Dict]:
-        try:return await self._request('GET',f'https://www.virustotal.com/api/v3/ip_addresses/{ip}')
-        except Exception as e:logger.error(f"Get IP report failed: {e}");return None
+    async def get_ip_report(self,ip:str,force:bool=False)->Optional[Dict]:
+        async def fetch():
+            try:return await self._request('GET',f'https://www.virustotal.com/api/v3/ip_addresses/{ip}')
+            except Exception as e:self._log_err("Get IP report failed",e);return None
+        return await self._cached_report(('ip',ip),fetch,force)
 
-    async def get_domain_report(self,domain:str)->Optional[Dict]:
-        try:return await self._request('GET',f'https://www.virustotal.com/api/v3/domains/{domain}')
-        except Exception as e:logger.error(f"Get domain report failed: {e}");return None
+    async def get_domain_report(self,domain:str,force:bool=False)->Optional[Dict]:
+        async def fetch():
+            try:return await self._request('GET',f'https://www.virustotal.com/api/v3/domains/{domain}')
+            except Exception as e:self._log_err("Get domain report failed",e);return None
+        return await self._cached_report(('domain',domain),fetch,force)
+
+    _comment_paths={'file':'files','url':'urls','domain':'domains','ip':'ip_addresses'}
+
+    def _comments_endpoint(self,scan_type:str,item_id:str)->Optional[str]:
+        p=self._comment_paths.get(scan_type)
+        return f'https://www.virustotal.com/api/v3/{p}/{item_id}/comments' if p else None
+
+    async def post_comment(self,scan_type:str,item_id:str,text:str)->Optional[Dict]:
+        endpoint=self._comments_endpoint(scan_type,item_id)
+        if not endpoint:return None
+        payload={"data":{"type":"comment","attributes":{"text":text}}}
+        return await self._request('POST',endpoint,json=payload)
+
+    async def delete_comment(self,comment_id:str)->None:
+        await self._request('DELETE',f'https://www.virustotal.com/api/v3/comments/{comment_id}')
+
+    async def get_comments(self,scan_type:str,item_id:str,cursor:Optional[str]=None)->Optional[Dict]:
+        endpoint=self._comments_endpoint(scan_type,item_id)
+        if not endpoint:return None
+        params={'limit':COMMENTS_PER_PAGE,'relationships':'author'}
+        if cursor:params['cursor']=cursor
+        try:return await self._request('GET',endpoint,params=params)
+        except NotFoundError:return None
+
+    async def get_comments_cached(self,scan_type:str,item_id:str,cursor:Optional[str]=None)->Tuple[Optional[Dict],bool]:
+        key=(scan_type,item_id,cursor)
+        cached=self._comments_cache.get(key)
+        if cached:
+            resp,ts=cached
+            if time.time()-ts<self._comments_cache_ttl:
+                return resp,False
+            self._comments_cache.pop(key,None)
+        resp=await self.get_comments(scan_type,item_id,cursor)
+        if resp is not None:
+            if len(self._comments_cache)>=self._comments_cache_max:
+                oldest_key=min(self._comments_cache,key=lambda k:self._comments_cache[k][1])
+                self._comments_cache.pop(oldest_key,None)
+            self._comments_cache[key]=(resp,time.time())
+        return resp,True
 
     def _is_domain(self,s:str)->bool:
-        if '/' in s or ':' in s:return False
+        if '/' in s or ':' in s or '@' in s:return False
+        try:
+            encoded=s.encode('idna').decode('ascii')
+        except Exception:
+            encoded=s
         pattern=r'^(?:[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z]{2,}$'
-        return bool(re.match(pattern,s))
+        return bool(re.match(pattern,encoded))
 
     def _is_valid_ip(self,s:str)->bool:
         try:ipaddress.ip_address(s);return True
@@ -635,10 +792,9 @@ class VirusTotalMod(loader.Module):
         return "\n".join(info),vt_url,stats
 
     def _result_buttons(self,vt_url:str,msg_id:int,scan_type:str=''):
-        row1=[{"text":f"{self._emoji('link',False)} {self.strings('view_report')}","url":vt_url},{"text":f"{self._emoji('check',False)} {self.strings('details')}","callback":self._details_cb,"args":(msg_id,)}]
+        row1=[{"text":f"{self._emoji('link',False)} {self.strings('view_report')}","url":vt_url},{"text":f"{self._emoji('check',False)} {self.strings('comments')}","callback":self._comments_cb,"args":(msg_id,)}]
         row2=[]
-        if scan_type not in('ip','domain'):
-            row2.append({"text":f"{self._emoji('refresh',False)} {self.strings('rescan')}","callback":self._rescan_cb,"args":(msg_id,)})
+        row2.append({"text":f"{self._emoji('check',False)} {self.strings('write_review')}","input":self.strings('review_prompt'),"handler":self._write_review_input,"args":(msg_id,)})
         row2.append({"text":f"{self._emoji('history',False)} {self.strings('history')}","callback":self._history_cb,"args":(1,msg_id)})
         return[row1,row2]
 
@@ -652,7 +808,7 @@ class VirusTotalMod(loader.Module):
         self.history=[]
         for i in self._db.get(__name__,'history',[]):
             try:self.history.append(HistoryEntry(item_id=i['item_id'],timestamp=datetime.fromisoformat(i['timestamp']),scan_type=i['scan_type'],name=i.get('name'),url=i.get('url'),as_owner=i.get('as_owner'),country_code=i.get('country_code'),stats=ScanStats(**i.get('stats',{})),raw_result=i.get('raw_result',{})))
-            except Exception as e:logger.warning(f"Failed to load history entry: {e}")
+            except Exception as e:self._log_err("Failed to load history entry",e,level='warning')
 
     async def client_ready(self,client,db):
         self._client=client
@@ -663,6 +819,7 @@ class VirusTotalMod(loader.Module):
         self.key_status.clear()
         self._load_history()
         self._cleanup_task=asyncio.create_task(self._cleanup_loop())
+        self._comments_cleanup_task=asyncio.create_task(self._comments_cleanup_loop())
 
     async def on_unload(self):
         if self._cleanup_task:
@@ -671,8 +828,23 @@ class VirusTotalMod(loader.Module):
                 await self._cleanup_task
             except asyncio.CancelledError:
                 pass
+        if getattr(self,'_comments_cleanup_task',None):
+            self._comments_cleanup_task.cancel()
+            try:
+                await self._comments_cleanup_task
+            except asyncio.CancelledError:
+                pass
         if self._session and not self._session.closed:await self._session.close()
         self._result_cache.clear()
+        self._comments_cache.clear()
+
+    async def _comments_cleanup_loop(self):
+        while True:
+            await asyncio.sleep(self._comments_cache_ttl)
+            t=time.time()
+            expired_c=[k for k,(_,ts) in self._comments_cache.items() if t-ts>self._comments_cache_ttl]
+            for k in expired_c:
+                self._comments_cache.pop(k,None)
 
     async def _cleanup_loop(self):
         while True:
@@ -748,7 +920,12 @@ class VirusTotalMod(loader.Module):
                f"👁️<code>{stats.undetected}/{stats.total} ({round(stats.undetected/total*100,1)}%)│{self.strings('undetected')}</code></blockquote>")
             mid=msg.id if hasattr(msg,'id') else id(msg)
             self._result_cache[mid]=(t,vt_url,time.time())
-            self._db.set(__name__,f"result_{mid}",{'text':t,'vt_url':vt_url,'timestamp':time.time(),'raw_result':data,'scan_type':scan_type})
+            chat_id=getattr(orig_msg,'chat_id',None) if orig_msg is not None else None
+            if chat_id is None:chat_id=getattr(msg,'chat_id',None)
+            disp_name=kwargs.get('history_name') or kwargs.get('name') or kwargs.get('url') or item_id
+            disp_name=str(disp_name)
+            if len(disp_name)>40:disp_name=disp_name[:40]+'...'
+            self._db.set(__name__,f"result_{mid}",{'text':t,'vt_url':vt_url,'timestamp':time.time(),'raw_result':data,'scan_type':scan_type,'chat_id':chat_id,'name':disp_name})
             form_target=orig_msg if orig_msg is not None else msg
             if hasattr(form_target,'inline_message_id') or (hasattr(form_target,'__class__') and 'InlineCall' in type(form_target).__name__):
                 await form_target.edit(text=t,reply_markup=self._result_buttons(vt_url,mid,scan_type))
@@ -756,6 +933,35 @@ class VirusTotalMod(loader.Module):
                 await self.inline.form(text=t,message=form_target,reply_markup=self._result_buttons(vt_url,mid,scan_type),ttl=300)
         except Exception as e:
             await utils.answer(msg,await self._handle_error(e,"show_results"))
+
+    def _relative_time(self,seconds:int)->str:
+        is_ru = self.strings('clear_history') == "Очистить"
+        if seconds < 45:
+            return "только что" if is_ru else "just now"
+        elif seconds < 3600:
+            minutes = seconds // 60
+            if is_ru:
+                return f"{minutes} мин. назад"
+            else:
+                return f"{minutes} min. ago" if minutes > 1 else "1 min. ago"
+        elif seconds < 86400:
+            hours = seconds // 3600
+            if is_ru:
+                if hours == 1: return "1 час назад"
+                elif 2 <= hours <= 4: return f"{hours} часа назад"
+                else: return f"{hours} ч. назад"
+            else:
+                return f"{hours} hours ago" if hours > 1 else "1 hour ago"
+        elif seconds < 172800:
+            return "вчера" if is_ru else "yesterday"
+        else:
+            days = seconds // 86400
+            if is_ru:
+                if days == 2: return "2 дня назад"
+                elif 3 <= days <= 4: return f"{days} дня назад"
+                else: return f"{days} дней назад"
+            else:
+                return f"{days} days ago"
 
     async def _history_cb(self,call,page:int=1,return_id:Optional[int]=None,query:Optional[str]=None):
         if not self.history:
@@ -792,34 +998,7 @@ class VirusTotalMod(loader.Module):
             except Exception:
                 seconds = 0
 
-            is_ru = self.strings('clear_history') == "Очистить"
-            
-            if seconds < 45:
-                dt = "только что" if is_ru else "just now"
-            elif seconds < 3600:
-                minutes = seconds // 60
-                if is_ru:
-                    dt = f"{minutes} мин. назад"
-                else:
-                    dt = f"{minutes} min. ago" if minutes > 1 else "1 min. ago"
-            elif seconds < 86400:
-                hours = seconds // 3600
-                if is_ru:
-                    if hours == 1: dt = "1 час назад"
-                    elif 2 <= hours <= 4: dt = f"{hours} часа назад"
-                    else: dt = f"{hours} ч. назад"
-                else:
-                    dt = f"{hours} hours ago" if hours > 1 else "1 hour ago"
-            elif seconds < 172800:
-                dt = "вчера" if is_ru else "yesterday"
-            else:
-                days = seconds // 86400
-                if is_ru:
-                    if days == 2: dt = "2 дня назад"
-                    elif 3 <= days <= 4: dt = f"{days} дня назад"
-                    else: dt = f"{days} дней назад"
-                else:
-                    dt = f"{days} days ago"
+            dt = self._relative_time(seconds)
 
             se,_=self._get_status(en.stats)
             if en.scan_type=='file':
@@ -860,48 +1039,164 @@ class VirusTotalMod(loader.Module):
 
     async def _cancel_cb(self,call):await self._history_cb(call,1)
 
-    async def _details_cb(self,call,msg_id:int,page:int=0):
+    async def _render_comments_page(self,call,msg_id:int,scan_type:str,item_id:str,cursor:Optional[str],offset:int,history:tuple,resp:Optional[Dict]):
         d=self._db.get(__name__,f"result_{msg_id}")
-        if not d:
-            return await call.answer(self.strings('error').format('Result expired'),show_alert=True)
-        raw=d.get('raw_result',{})
-        scan_type=d.get('scan_type','')
-        engines=raw.get('data',{}).get('attributes',{}).get('last_analysis_results',{})
-        if not engines:
-            return await call.answer(self.strings('no_detections'),show_alert=True)
-        detections=[]
-        for name,r in engines.items():
-            cat=r.get('category','')
-            res=r.get('result')
-            if cat=='malicious' and res:
-                detections.append((self._emoji('skull'),name,res))
-        for name,r in engines.items():
-            cat=r.get('category','')
-            res=r.get('result')
-            if cat=='suspicious' and res:
-                detections.append((self._emoji('warning'),name,res))
-        if not detections:
-            return await call.answer(self.strings('no_detections'),show_alert=True)
-        PER_PAGE=10
-        total=len(detections)
-        max_page=(total-1)//PER_PAGE
-        page=max(0,min(page,max_page))
-        start=page*PER_PAGE
-        chunk=detections[start:start+PER_PAGE]
-        lines=[f"<b>{self._emoji('check')} {self.strings('details_title')} ({start+1}–{min(start+PER_PAGE,total)} {self.strings('of')} {total}):</b>\n"]
-        for emoji,name,result in chunk:
-            lines.append(f"{emoji} <b>{name}</b> — <code>{result}</code>")
+        own_id=(d or {}).get('own_comment_id')
+        comments=(resp or {}).get('data') or []
+        comments=sorted(
+            comments,
+            key=lambda c:(c.get('attributes',{}).get('votes',{}).get('positive',0)
+                          -c.get('attributes',{}).get('votes',{}).get('negative',0)),
+            reverse=True,
+        )
+        pos=neg=0
+        for c in comments:
+            votes=c.get('attributes',{}).get('votes',{})
+            pos+=votes.get('positive',0)
+            neg+=votes.get('negative',0)
+        shown_to=offset+len(comments)
+        lines=[f"<b>{self._emoji('check')} {self.strings('comments_title')}</b>","━━━━━━━━━━━━━━━━━━━"]
+        total_count=(resp or {}).get('meta',{}).get('count')
+        if total_count is not None:
+            lines.append(f"<i>{self.strings('comments_total').format(total_count)}</i>")
+        for i,c in enumerate(comments,offset+1):
+            attrs=c.get('attributes',{})
+            text=html.escape((attrs.get('text') or '').strip())
+            if len(text)>300:text=text[:300]+'…'
+            author=html.escape(c.get('relationships',{}).get('author',{}).get('data',{}).get('id') or self.strings('unknown'))
+            ts=attrs.get('date')
+            dt=self._relative_time(int(time.time()-ts)) if ts else ''
+            meta=f"{author} · <code>{dt}</code>" if dt else author
+            c_votes=attrs.get('votes',{})
+            c_pos=c_votes.get('positive',0)
+            c_neg=c_votes.get('negative',0)
+            vote_str=self.strings('comment_votes').format(c_pos,c_neg)
+            mark=f" <i>({self.strings('you')})</i>" if own_id and c.get('id')==own_id else ""
+            lines.append(f"<blockquote expandable><b>{i}.{mark} {meta}</b>\n{text}\n{vote_str}</blockquote>")
+        votes_line=self.strings('comment_votes').format(pos,neg)
+        lines.append(f"\n<b>{votes_line}</b>")
         txt='\n'.join(lines)
+        next_cursor=(resp or {}).get('meta',{}).get('cursor')
         nav=[]
-        if page>0:
-            nav.append({"text":f"{self._emoji('left_arrow',False)} {self.strings('prev_page')}","callback":self._details_cb,"args":(msg_id,page-1)})
-        nav.append({"text":f"{page+1}/{max_page+1}","callback":self._details_cb,"args":(msg_id,page)})
-        if page<max_page:
-            nav.append({"text":f"{self.strings('next_page')} {self._emoji('right_arrow',False)}","callback":self._details_cb,"args":(msg_id,page+1)})
+        if history:
+            prev_cursor=history[-1]
+            new_history=history[:-1]
+            nav.append({"text":f"{self._emoji('left_arrow',False)} {self.strings('prev_page')}","callback":self._comments_cb,"args":(msg_id,prev_cursor,max(0,offset-COMMENTS_PER_PAGE),new_history)})
+        if next_cursor:
+            nav.append({"text":f"{self.strings('next_page')} {self._emoji('right_arrow',False)}","callback":self._comments_cb,"args":(msg_id,next_cursor,shown_to,history+(cursor,))})
         btns=[]
-        btns.append(nav)
-        btns.append([{"text":f"{self._emoji('back_arrow',False)} {self.strings('back_to_results')}","callback":self._return_cb,"args":(msg_id,)}])
+        if nav:btns.append(nav)
+        extra=[]
+        if offset>0:
+            extra.append({"text":f"{self._emoji('back_arrow',False)} {self.strings('to_start')}","callback":self._comments_cb,"args":(msg_id,None,0,())})
+        if next_cursor:
+            extra.append({"text":f"{self.strings('to_end')} {self._emoji('right_arrow',False)}","callback":self._comments_end_cb,"args":(msg_id,next_cursor,shown_to,history+(cursor,))})
+        extra.append({"text":f"{self._emoji('back_arrow',False)} {self.strings('back_to_results')}","callback":self._return_cb,"args":(msg_id,)})
+        btns.append(extra)
         await call.edit(text=txt,reply_markup=btns)
+
+    async def _delete_comment_cb(self,call,msg_id:int,comment_id:str):
+        try:
+            await self.delete_comment(comment_id)
+        except Exception as e:
+            return await call.answer(await self._handle_error(e,"delete_comment",plain=True),show_alert=True)
+        d=self._db.get(__name__,f"result_{msg_id}")
+        if d and d.get('own_comment_id')==comment_id:
+            rd=dict(d);rd.pop('own_comment_id',None)
+            self._db.set(__name__,f"result_{msg_id}",rd)
+            scan_type=d.get('scan_type','')
+            item_id=d.get('vt_url','').rstrip('/').split('/')[-1]
+            self._comments_cache.pop((scan_type,item_id,None),None)
+        await call.answer(f"{self._emoji('trash',False)} {self.strings('comment_deleted')}")
+        await self._comments_cb(call,msg_id)
+
+    async def _delete_own_review_cb(self,call,msg_id:int,comment_id:str):
+        try:
+            await self.delete_comment(comment_id)
+        except Exception as e:
+            return await call.answer(await self._handle_error(e,"delete_comment",plain=True),show_alert=True)
+        d=self._db.get(__name__,f"result_{msg_id}")
+        if d and d.get('own_comment_id')==comment_id:
+            rd=dict(d);rd.pop('own_comment_id',None)
+            self._db.set(__name__,f"result_{msg_id}",rd)
+            scan_type=d.get('scan_type','')
+            item_id=d.get('vt_url','').rstrip('/').split('/')[-1]
+            self._comments_cache.pop((scan_type,item_id,None),None)
+        txt=f"{self._emoji('trash')} <b>{self.strings('comment_deleted')}</b>"
+        await call.edit(text=txt,reply_markup=None)
+
+    async def _comments_cb(self,call,msg_id:int,cursor:Optional[str]=None,offset:int=0,history:tuple=()):
+        if msg_id in self._comments_inflight:
+            return await call.answer(self.strings('please_wait'))
+        self._comments_inflight.add(msg_id)
+        try:
+            d=self._db.get(__name__,f"result_{msg_id}")
+            if not d:
+                return await call.answer(self.strings('error').format('Result expired'),show_alert=True)
+            vt_url=d.get('vt_url','')
+            scan_type=d.get('scan_type','')
+            item_id=vt_url.rstrip('/').split('/')[-1]
+            try:
+                resp,was_fetched=await self.get_comments_cached(scan_type,item_id,cursor)
+            except Exception as e:
+                return await call.answer(await self._handle_error(e,"comments",plain=True),show_alert=True)
+            comments=(resp or {}).get('data') or []
+            if not comments and offset==0:
+                return await call.answer(self.strings('no_comments'),show_alert=True)
+            await self._render_comments_page(call,msg_id,scan_type,item_id,cursor,offset,history,resp)
+            if was_fetched:
+                await call.answer(self.strings('spent_requests').format(-1))
+        finally:
+            self._comments_inflight.discard(msg_id)
+
+    async def _comments_end_cb(self,call,msg_id:int,cursor:Optional[str]=None,offset:int=0,history:tuple=()):
+        if msg_id in self._comments_inflight:
+            return await call.answer(self.strings('please_wait'))
+        self._comments_inflight.add(msg_id)
+        try:
+            d=self._db.get(__name__,f"result_{msg_id}")
+            if not d:
+                return await call.answer(self.strings('error').format('Result expired'),show_alert=True)
+            vt_url=d.get('vt_url','')
+            scan_type=d.get('scan_type','')
+            item_id=vt_url.rstrip('/').split('/')[-1]
+            cur_cursor,cur_offset,cur_history=cursor,offset,history
+            resp=None
+            hit_limit=False
+            spent=0
+            prev_resp=prev_cursor=prev_offset=prev_history=None
+            for i in range(MAX_JUMP_PAGES):
+                try:
+                    resp,was_fetched=await self.get_comments_cached(scan_type,item_id,cur_cursor)
+                    if was_fetched:spent+=1
+                except Exception as e:
+                    if i==0:
+                        return await call.answer(self.strings('quota_short'),show_alert=True)
+                    hit_limit=True
+                    resp,cur_cursor,cur_offset,cur_history=prev_resp,prev_cursor,prev_offset,prev_history
+                    break
+                comments=(resp or {}).get('data') or []
+                if not comments:
+                    if i==0:
+                        return await call.answer(self.strings('no_comments'),show_alert=True)
+                    break
+                next_cursor=(resp or {}).get('meta',{}).get('cursor')
+                if not next_cursor:
+                    break
+                if i==MAX_JUMP_PAGES-1:
+                    hit_limit=True
+                    break
+                prev_resp,prev_cursor,prev_offset,prev_history=resp,cur_cursor,cur_offset,cur_history
+                cur_history=cur_history+(cur_cursor,)
+                cur_offset+=len(comments)
+                cur_cursor=next_cursor
+            await self._render_comments_page(call,msg_id,scan_type,item_id,cur_cursor,cur_offset,cur_history,resp)
+            if hit_limit:
+                await call.answer(self.strings('jump_limit_hit').format(-spent))
+            elif spent>0:
+                await call.answer(self.strings('spent_requests').format(-spent))
+        finally:
+            self._comments_inflight.discard(msg_id)
 
     async def _return_cb(self,call,msg_id:int):
         if msg_id in self._result_cache:
@@ -915,58 +1210,57 @@ class VirusTotalMod(loader.Module):
         self._result_cache[msg_id]=(d['text'],d['vt_url'],time.time())
         await call.edit(text=d['text'],reply_markup=self._result_buttons(d['vt_url'],msg_id,d.get('scan_type','')))
 
-    async def _rescan_cb(self,call,msg_id:int):
+    async def _write_review_input(self,call,query:str,msg_id:int):
+        text=(query or '').strip()
         d=self._db.get(__name__,f"result_{msg_id}")
         if not d:
-            return await call.answer(self.strings('error').format('Result expired'),show_alert=True)
-        scan_type=d.get('scan_type','')
+            try:await call.answer(self.strings('error').format('Result expired'),show_alert=True)
+            except Exception:pass
+            return
+        chat_id=d.get('chat_id')
+        if not text:
+            if chat_id and self._client:
+                try:await self._client.send_message(chat_id,f"<b>{self.strings('review_empty')}</b>",parse_mode='html')
+                except Exception:pass
+            return
         vt_url=d.get('vt_url','')
+        scan_type=d.get('scan_type','')
         item_id=vt_url.rstrip('/').split('/')[-1]
-        await call.edit(text=f"<b>{self._emoji('refresh')} {self.strings('rescanning')}</b>",reply_markup=None)
-        s=time.time()
+        name=f"<code>{html.escape(d.get('name') or item_id)}</code>"
         try:
-            if scan_type=='file':
-                await self._request('POST',f'https://www.virustotal.com/api/v3/files/{item_id}/analyse')
-                await call.edit(text=f"<b>{self._emoji('waiting')} {self.strings('waiting')}</b>")
-                await asyncio.sleep(15)
-                r=await self.get_file_report(item_id)
-                if r:
-                    raw=d.get('raw_result',{})
-                    fname=raw.get('data',{}).get('attributes',{}).get('meaningful_name') or f"{item_id[:16]}..."
-                    sz=raw.get('data',{}).get('attributes',{}).get('size',0)
-                    await self._show_results(call,item_id,r,'file',name=fname,scan_time=int(time.time()-s),file_size=sz,is_hash=True)
-                else:
-                    await call.edit(text=f"<b>{self._emoji('not_found')} {self.strings('not_found')}</b>")
-            elif scan_type=='url':
-                import base64 as _b64
-                try:
-                    padded=item_id+'=='
-                    orig_url=_b64.urlsafe_b64decode(padded).decode()
-                except Exception:
-                    orig_url=None
-                if not orig_url:
-                    return await call.edit(text=f"<b>{self._emoji('error')} {self.strings('rescan_not_supported')}</b>")
-                sc=await self.scan_url(orig_url)
-                if not sc or not (aid:=sc.get('data',{}).get('id')):
-                    return await call.edit(text=f"<b>{self._emoji('error')} {self.strings('scan_error')}</b>")
-                pr=await self._poll_analysis(aid)
-                if not pr:
-                    return await call.edit(text=f"<b>{self._emoji('timeout')} {self.strings('timeout')}</b>")
-                fn=await self.get_url_report(item_id)
-                await self._show_results(call,item_id,fn or pr,'url',url=orig_url,scan_time=int(time.time()-s))
-            elif scan_type=='ip':
-                r=await self.get_ip_report(item_id)
-                if r:await self._show_results(call,item_id,r,'ip',url=item_id,scan_time=int(time.time()-s))
-                else:await call.edit(text=f"<b>{self._emoji('not_found')} {self.strings('not_found')}</b>")
-            elif scan_type=='domain':
-                r=await self.get_domain_report(item_id)
-                if r:await self._show_results(call,item_id,r,'domain',url=item_id,scan_time=int(time.time()-s))
-                else:await call.edit(text=f"<b>{self._emoji('not_found')} {self.strings('not_found')}</b>")
+            presp=await self.post_comment(scan_type,item_id,text)
+            comment_id=(presp or {}).get('data',{}).get('id')
+            if comment_id:
+                rd=dict(d);rd['own_comment_id']=comment_id
+                self._db.set(__name__,f"result_{msg_id}",rd)
+            msg=f"{self._emoji('success')} <b>{self.strings('review_posted').format(name)}</b>"
+            self._comments_cache.pop((scan_type,item_id,None),None)
+            try:
+                resp,_=await self.get_comments_cached(scan_type,item_id)
+                count=(resp or {}).get('meta',{}).get('count')
+            except Exception:
+                count=None
+            comment_preview=html.escape(text.strip())
+            if len(comment_preview)>300:comment_preview=comment_preview[:300]+'…'
+            if count is not None:
+                msg+=f"\n{self._emoji('comment')} <b>{self.strings('comments')}:</b> <code>{count}</code> - <i>{comment_preview}</i>"
             else:
-                await call.edit(text=f"<b>{self._emoji('error')} {self.strings('rescan_not_supported')}</b>")
+                msg+=f"\n{self._emoji('comment')} <b>{self.strings('comments')}...</b> - <i>{comment_preview}</i>"
         except Exception as e:
-            et=await self._handle_error(e,"rescan")
-            await call.edit(text=et)
+            reason=await self._handle_error(e,"review")
+            reason=re.sub(r'</?(?:b|code)>','',reason).split('.')[0].strip()
+            msg=f"{self._emoji('error')} <b>{self.strings('review_failed').format(name)}</b> — {reason}"
+            comment_id=None
+        if chat_id and self._client:
+            if comment_id:
+                try:
+                    await self.inline.form(text=msg,message=chat_id,reply_markup=[[{"text":f"{self._emoji('trash',False)} {self.strings('delete_short')}","callback":self._delete_own_review_cb,"args":(msg_id,comment_id)}]],ttl=300)
+                except Exception:
+                    try:await self._client.send_message(chat_id,msg,parse_mode='html')
+                    except Exception:pass
+            else:
+                try:await self._client.send_message(chat_id,msg,parse_mode='html')
+                except Exception:pass
 
     @loader.command(ru_doc="[файл/ссылка/айпи/хеш] - просканировать",en_doc="[file/url/IP/hash] - scan")
     async def vt(self,message):
@@ -1098,13 +1392,15 @@ class VirusTotalMod(loader.Module):
             else:await m.edit(f"<b>{self._emoji('not_found')} {self.strings('not_found')}</b>")
             return
         if self._is_domain(t):
+            try:t_ascii=t.encode('idna').decode('ascii')
+            except Exception:t_ascii=t
             m=await utils.answer(message,f"<b>{self._emoji('globe')} {self.strings('checking_domain')} {t}...</b>")
             s=time.time()
-            try:rp=await self.get_domain_report(t)
+            try:rp=await self.get_domain_report(t_ascii)
             except Exception as e:
                 et=await self._handle_error(e,"domain_report")
                 return await m.edit(et)
-            if rp:await self._show_results(m,t,rp,'domain',orig_msg=message,url=t,scan_time=int(time.time()-s))
+            if rp:await self._show_results(m,t_ascii,rp,'domain',orig_msg=message,url=t,scan_time=int(time.time()-s))
             else:await m.edit(f"<b>{self._emoji('not_found')} {self.strings('not_found')}</b>")
             return
         u=self._validate_url(t)
@@ -1154,6 +1450,45 @@ class VirusTotalMod(loader.Module):
         self.history.clear()
         self._db.set(__name__,'history',[])
         await utils.answer(message,f"{self._emoji('trash')} <b>{self.strings('history_cleared')}</b>. {self._emoji('success')} <b>{self.strings('deleted_entries')}: {c}</b>")
+
+    @loader.command(ru_doc=" - статус ключей и квота",en_doc=" - key status and quota")
+    async def vtkey(self,message):
+        self._refresh_api_keys()
+        if not self.api_keys:
+            return await utils.answer(message,f"{self._emoji('forbidden')} <b>{self.strings('quota_no_keys')}</b>")
+        m=await utils.answer(message,f"{self._emoji('progress')} <b>{self.strings('loading')}</b>")
+        total=len(self.api_keys)
+        active=sum(1 for k in self.api_keys if self.key_status.get(k,True))
+        today=datetime.now(timezone.utc).date()
+        local_count=self._request_count if self._request_count_day==today else 0
+        used_sum=0
+        allowed_sum=0
+        got_data=False
+        for key in self.api_keys:
+            data=await self.get_overall_quotas(key)
+            if not data:continue
+            d=data.get('data',{}).get('api_requests_daily',{})
+            entry=d.get('user') or d
+            allowed=entry.get('allowed')
+            used=entry.get('used')
+            if allowed is None or used is None:continue
+            used_sum+=used
+            allowed_sum+=allowed
+            got_data=True
+        text=(
+            f"<b>{self._emoji('shield')} {self.strings('quota_title')}</b>\n"
+            f"━━━━━━━━━━━━━━━━━━━\n"
+            f"{self.strings('quota_active_keys')}: <code>{active}/{total}</code>\n"
+        )
+        if got_data:
+            key_type=self.strings('quota_free') if allowed_sum<=500*total else self.strings('quota_paid')
+            text+=f"{self.strings('quota_key_type')}: <code>{key_type}</code>\n"
+        text+=f"{self.strings('quota_requests_today')}: <code>{local_count}</code>\n"
+        if got_data:
+            text+=f"{self.strings('quota_used')}: <code>{used_sum}/{allowed_sum}</code>"
+        else:
+            text+=f"<i>{self.strings('quota_unavailable')}</i>"
+        await m.edit(text)
 
     @loader.command(ru_doc=" - обновить модуль до последней версии",en_doc=" - update module to latest version")
     async def vtupdate(self,message):

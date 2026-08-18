@@ -7,7 +7,7 @@
 # meta banner: https://raw.githubusercontent.com/lcetaa/VirusTotal-hikka-bot/refs/heads/main/logo.png
 # meta pic: https://raw.githubusercontent.com/lcetaa/VirusTotal-hikka-bot/refs/heads/main/icon.png
 
-__version__ = (2, 0, 8) #show api spend toast and comments added
+__version__ = (2, 0, 9) #fix English string
 
 # ░█░░░█▀▀░█▀▀░▀█▀░█▀█
 # ░█░░░█░░░█▀▀░░█░░█▀█
@@ -58,9 +58,9 @@ class HistoryEntry:
 
 @loader.tds
 class VirusTotalMod(loader.Module):
+    """Scan files, URLs, IPs and hashes (MD5/SHA1/SHA256) via VirusTotal API."""
     strings={
         "name":"VirusTotal",
-        "_cls_doc":"Scan files, URLs, IPs and hashes (MD5/SHA1/SHA256) via VirusTotal API.",
         "no_url":"Specify URL, IP, domain, file or hash (MD5/SHA1/SHA256)",
         "checking_domain":"Checking domain...",
         "reputation":"Reputation",
@@ -828,12 +828,16 @@ class VirusTotalMod(loader.Module):
                 await self._cleanup_task
             except asyncio.CancelledError:
                 pass
+            except Exception as e:
+                self._log_err("Cleanup task ended with an error during unload", e, level='warning')
         if getattr(self,'_comments_cleanup_task',None):
             self._comments_cleanup_task.cancel()
             try:
                 await self._comments_cleanup_task
             except asyncio.CancelledError:
                 pass
+            except Exception as e:
+                self._log_err("Comments cleanup task ended with an error during unload", e, level='warning')
         if self._session and not self._session.closed:await self._session.close()
         self._result_cache.clear()
         self._comments_cache.clear()
@@ -853,7 +857,8 @@ class VirusTotalMod(loader.Module):
             expired=[k for k,(_,_,ts) in self._result_cache.items() if t-ts>self._cache_ttl]
             for k in expired:
                 self._result_cache.pop(k,None)
-            for k in list((self._db.get(__name__) or {}).keys()):
+            module_data = self._db[__name__] if __name__ in self._db else {}
+            for k in list(module_data.keys()):
                 if k.startswith('result_'):
                     data=self._db.get(__name__,k)
                     if data and isinstance(data,dict) and 'timestamp' in data:

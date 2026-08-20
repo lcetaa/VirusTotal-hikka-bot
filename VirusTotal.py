@@ -4,10 +4,11 @@
 #  https://opensource.org/licenses/MIT
 
 # meta developer: @lceta
-# meta banner: https://raw.githubusercontent.com/lcetaa/VirusTotal-hikka-bot/refs/heads/main/logo.png
-# meta pic: https://raw.githubusercontent.com/lcetaa/VirusTotal-hikka-bot/refs/heads/main/icon.png
+# meta tags: security, virustotal, malware, scanner, url_checker, automation
+# meta banner: https://raw.githubusercontent.com/lcetaa/VirusTotal-hikka-bot/refs/heads/main/meta_banner.png
+# meta pic: https://raw.githubusercontent.com/lcetaa/VirusTotal-hikka-bot/refs/heads/main/meta_pic.png
 
-__version__ = (2, 0, 9) #fix English string
+__version__ = (2, 1, 0) #fix Update command
 
 # ░█░░░█▀▀░█▀▀░▀█▀░█▀█
 # ░█░░░█░░░█▀▀░░█░░█▀█
@@ -26,6 +27,9 @@ MAX_FILE_SIZE=32*1024*1024
 HISTORY_PER_PAGE=5
 COMMENTS_PER_PAGE=10
 MAX_JUMP_PAGES=7
+UPDATE_URL="https://raw.githubusercontent.com/lcetaa/VirusTotal-hikka-bot/refs/heads/main/VirusTotal.py"
+UPDATE_LOCK_WAIT=15
+UPDATE_INSTALL_TIMEOUT=60
 logger=logging.getLogger(__name__)
 
 class VirusTotalError(Exception):pass
@@ -165,15 +169,16 @@ class VirusTotalMod(loader.Module):
         "delete_short":"delete",
         "you":"you",
         "comment_deleted":"Comment deleted",
-        "checking_update":"Checking for update...",
-        "update_load_error":"Download error: HTTP {}",
-        "already_latest":"You already have the latest version",
-        "version_unknown":"unknown",
-        "installing_update":"Installing update {}...",
-        "update_success":"Module updated to {}",
-        "update_fallback":"Use <code>.dlm {}</code> if auto-install failed, remove old: <code>.unloadmod VirusTotal</code>",
-        "update_timeout":"Timeout while downloading update",
-        "update_error":"Update error: {}",
+        "upd_checking":"Checking for updates...",
+        "upd_downloading":"Updating VirusTotal...",
+        "upd_done":"VirusTotal updated successfully!",
+        "upd_none":"You already have the latest version.",
+        "upd_none_force":"You already have the latest version. Update anyway?",
+        "upd_force_btn":"↻ Update anyway",
+        "upd_cancel_btn":"✖ Cancel",
+        "upd_fail":"Update failed. Check the logs.",
+        "upd_fetch_fail":"Could not reach the update source. Try again later.",
+        "upd_busy":"An update check/install is already running in the background. Try again in a bit.",
         "file_default":"file",
         "file_too_large":"File is too large to upload to VT",
         "size_label":"Size",
@@ -292,15 +297,16 @@ class VirusTotalMod(loader.Module):
         "delete_short":"удалить",
         "you":"вы",
         "comment_deleted":"Комментарий удалён",
-        "checking_update":"Проверяю обновление...",
-        "update_load_error":"Ошибка загрузки: HTTP {}",
-        "already_latest":"У вас уже последняя версия",
-        "version_unknown":"неизвестна",
-        "installing_update":"Устанавливаю обновление {}...",
-        "update_success":"Модуль обновлён до {}",
-        "update_fallback":"Используйте <code>.dlm {}</code> если не сработало автоматически, удалите старый: <code>.unloadmod VirusTotal</code>",
-        "update_timeout":"Таймаут при загрузке обновления",
-        "update_error":"Ошибка обновления: {}",
+        "upd_checking":"Проверяю обновления...",
+        "upd_downloading":"Обновляю VirusTotal...",
+        "upd_done":"VirusTotal успешно обновлён!",
+        "upd_none":"У вас уже последняя версия.",
+        "upd_none_force":"У вас уже последняя версия. Обновить всё равно?",
+        "upd_force_btn":"↻ Обновить всё равно",
+        "upd_cancel_btn":"✖ Отмена",
+        "upd_fail":"Обновление не удалось. Смотрите логи.",
+        "upd_fetch_fail":"Не удалось достучаться до источника обновления. Попробуйте позже.",
+        "upd_busy":"Проверка/установка обновления уже выполняется в фоне. Попробуйте чуть позже.",
         "file_default":"файл",
         "file_too_large":"Файл слишком большой для загрузки на VT",
         "size_label":"Размер",
@@ -341,6 +347,7 @@ class VirusTotalMod(loader.Module):
         self.key_lock=asyncio.Lock()
         self._timeout=aiohttp.ClientTimeout(total=30)
         self._connector=aiohttp.TCPConnector(limit=20)
+        self._update_lock=asyncio.Lock()
 
     def _emoji(self,name:str,premium:bool=True)->str:
         emojis={
@@ -490,6 +497,13 @@ class VirusTotalMod(loader.Module):
         if 'rate' in m or 'too many' in m:return RateLimitError(m)
         if 'not found' in m:return NotFoundError(m)
         return VirusTotalError(m)
+
+    async def _get_session(self)->aiohttp.ClientSession:
+        if not self._session or self._session.closed:
+            if self._connector is None or self._connector.closed:
+                self._connector=aiohttp.TCPConnector(limit=20)
+            self._session=aiohttp.ClientSession(timeout=self._timeout,connector=self._connector)
+        return self._session
 
     async def _request(self,method:str,url:str,**kwargs)->Optional[Dict]:
         today=datetime.now(timezone.utc).date()
@@ -1495,43 +1509,108 @@ class VirusTotalMod(loader.Module):
             text+=f"<i>{self.strings('quota_unavailable')}</i>"
         await m.edit(text)
 
-    @loader.command(ru_doc=" - обновить модуль до последней версии",en_doc=" - update module to latest version")
-    async def vtupdate(self,message):
-        url="https://raw.githubusercontent.com/lcetaa/VirusTotal-hikka-bot/refs/heads/main/VirusTotal.py"
-        m=await utils.answer(message,f"{self._emoji('refresh')} <b>{self.strings('checking_update')}</b>")
-        try:
-            async with aiohttp.ClientSession() as s:
-                async with s.get(url,timeout=aiohttp.ClientTimeout(total=15)) as r:
-                    if r.status!=200:
-                        return await m.edit(f"{self._emoji('error')} <b>{self.strings('update_load_error').format(r.status)}</b>")
-                    code=await r.text()
-            import re as _re
-            match=_re.search(r"__version__\s*=\s*\((\d+),\s*(\d+),\s*(\d+)\)",code)
-            if match:
-                new_ver=tuple(int(x) for x in match.groups())
-                cur_ver=__version__
-                if new_ver<=cur_ver:
-                    return await m.edit(
-                        f"{self._emoji('success')} <b>{self.strings('already_latest')}</b>\n"
-                        f"<code>v{cur_ver[0]}.{cur_ver[1]}.{cur_ver[2]}</code>"
-                    )
-                ver_str=f"v{new_ver[0]}.{new_ver[1]}.{new_ver[2]}"
-            else:
-                ver_str=self.strings('version_unknown')
-            await m.edit(f"{self._emoji('refresh')} <b>{self.strings('installing_update').format(ver_str)}</b>")
-            ldr = self.lookup("Loader")
-            if not ldr or not hasattr(ldr, "download_and_install"):
-                return await m.edit(f"{self._emoji('error')} <b>{self.strings('update_error').format('Loader not found')}</b>")
-            await ldr.download_and_install(url)
-            if getattr(ldr, "fully_loaded", False):
-                ldr.update_modules_in_db()
-            await m.edit(
-                f"{self._emoji('success')} <b>{self.strings('update_success').format(ver_str)}</b>\n"
-                f"{self.strings('update_fallback').format(url)}"
-            )
-        except asyncio.TimeoutError:
-            await m.edit(f"{self._emoji('timeout')} <b>{self.strings('update_timeout')}</b>")
-        except Exception as e:
-            await m.edit(f"{self._emoji('error')} <b>{self.strings('update_error').format(e)}</b>")
 
-    
+    async def _get_local_source(self):
+        """Returns the source code of the currently loaded module (via loader or inspect)."""
+        import sys,inspect
+        mod=sys.modules.get(self.__class__.__module__)
+        ldr_obj=getattr(mod,"__loader__",None)
+        if ldr_obj and hasattr(ldr_obj,"get_source"):
+            try:
+                src=ldr_obj.get_source(self.__class__.__module__)
+                if src:return src
+            except Exception as e:logger.debug("Failed to get the source via __loader__.get_source(): %s",e)
+        if mod:
+            try:return inspect.getsource(mod)
+            except Exception as e:logger.debug("Failed to get the source via inspect.getsource(): %s",e)
+        return None
+
+    def _hash_source(self,src)->str:
+        return hashlib.sha256(src.encode("utf-8")).hexdigest()
+
+    async def _fetch_remote_source(self):
+        """Downloads the latest module code from GitHub (raw). Returns bytes or None on error."""
+        try:
+            session=await self._get_session()
+            headers={"Cache-Control":"no-cache","Pragma":"no-cache"}
+            bust_url=f"{UPDATE_URL}?_={int(time.time())}"
+            async with session.get(bust_url,headers=headers,timeout=aiohttp.ClientTimeout(total=20))as resp:
+                if resp.status!=200:
+                    logger.warning("Auto-update: server returned status %s",resp.status)
+                    return None
+                return await resp.read()
+        except Exception as e:
+            logger.warning("Auto-update: failed to download the source — %s",e)
+            return None
+
+    async def _safe_install_update(self)->bool:
+        """Installs the fresh module version via the Loader."""
+        ldr=self.lookup("Loader")
+        if not ldr or not hasattr(ldr,"download_and_install"):
+            logger.error("Auto-update: the Loader module is unavailable")
+            return False
+        try:
+            res=await asyncio.wait_for(ldr.download_and_install(UPDATE_URL),timeout=UPDATE_INSTALL_TIMEOUT)
+            if getattr(ldr,"fully_loaded",False):
+                ldr.update_modules_in_db()
+            return res==1
+        except asyncio.TimeoutError:
+            logger.warning("Auto-update: install failed — timeout (%s sec)",UPDATE_INSTALL_TIMEOUT)
+            return False
+        except Exception as e:
+            logger.warning("Auto-update: install failed — %s",e)
+            return False
+
+    async def _check_update_hashes(self):
+        """Compares the hash of the local and remote code. Returns (differs:bool|None, remote_ok:bool)."""
+        remote_bytes=await self._fetch_remote_source()
+        if not remote_bytes:return None,False
+        remote_hash=hashlib.sha256(remote_bytes).hexdigest()
+        local_src=await self._get_local_source()
+        local_hash=self._hash_source(local_src)if local_src else""
+        if not local_hash:
+            logger.warning("Auto-update: failed to get the local version hash, assuming they differ")
+            return True,True
+        return remote_hash!=local_hash,True
+
+    async def _upd_force_cb(self,call):
+        try:await call.answer()
+        except Exception as e:logger.debug("Failed to respond to the update callback: %s",e)
+        try:await call.edit(f"{self._emoji('refresh')} <b>{self.strings('upd_downloading')}</b>")
+        except Exception as e:logger.debug("Failed to update the update-form text: %s",e)
+        ok=await self._safe_install_update()
+        text=f"{self._emoji('success')} <b>{self.strings('upd_done')}</b>"if ok else f"{self._emoji('error')} <b>{self.strings('upd_fail')}</b>"
+        try:await call.edit(text)
+        except Exception as e:logger.debug("Failed to show the update result: %s",e)
+
+    async def _upd_cancel_cb(self,call):
+        try:await call.delete()
+        except Exception as e:logger.debug("Failed to close the update form: %s",e)
+
+    @loader.command(ru_doc="[-f|--force] - проверить и установить обновление модуля вручную",en_doc="[-f|--force] - manually check for and install a module update")
+    async def vtupdate(self,message):
+        args=utils.get_args_raw(message)
+        force="-f"in args or"--force"in args
+        m=await utils.answer(message,f"{self._emoji('refresh')} <b>{self.strings('upd_downloading')if force else self.strings('upd_checking')}</b>")
+        try:
+            await asyncio.wait_for(self._update_lock.acquire(),timeout=UPDATE_LOCK_WAIT)
+        except asyncio.TimeoutError:
+            return await m.edit(f"{self._emoji('error')} <b>{self.strings('upd_busy')}</b>")
+        try:
+            if force:
+                ok=await self._safe_install_update()
+                return await m.edit(f"{self._emoji('success')} <b>{self.strings('upd_done')}</b>"if ok else f"{self._emoji('error')} <b>{self.strings('upd_fail')}</b>")
+            differs,remote_ok=await self._check_update_hashes()
+            if not remote_ok:
+                return await m.edit(f"{self._emoji('error')} <b>{self.strings('upd_fetch_fail')}</b>")
+            if not differs:
+                try:
+                    await self.inline.form(text=f"{self._emoji('success')} <b>{self.strings('upd_none_force')}</b>",message=m,reply_markup=[[{"text":self.strings('upd_force_btn'),"callback":self._upd_force_cb},{"text":self.strings('upd_cancel_btn'),"callback":self._upd_cancel_cb}]])
+                except Exception:
+                    await m.edit(f"{self._emoji('success')} <b>{self.strings('upd_none')}</b>")
+                return
+            await m.edit(f"{self._emoji('refresh')} <b>{self.strings('upd_downloading')}</b>")
+            ok=await self._safe_install_update()
+            await m.edit(f"{self._emoji('success')} <b>{self.strings('upd_done')}</b>"if ok else f"{self._emoji('error')} <b>{self.strings('upd_fail')}</b>")
+        finally:
+            self._update_lock.release()
